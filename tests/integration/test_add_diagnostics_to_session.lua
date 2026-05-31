@@ -14,16 +14,16 @@ describe("Add diagnostics to session", function()
     end)
 
     local function initialize_session_and_switch_to_buffer(bufnr)
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
-        child.lua([[ require("agentic").close() ]])
+        child.lua([[ require("tend").close() ]])
         child.flush()
         child.lua(("vim.api.nvim_set_current_buf(%d)"):format(bufnr))
     end
 
     local function get_session_diagnostics()
         return child.lua([[
-            local session = require("agentic.session_registry").get_session_for_tab_page()
+            local session = require("tend.session_registry").get_session_for_tab_page()
             return session.diagnostics_list:get_diagnostics()
         ]])
     end
@@ -45,7 +45,7 @@ describe("Add diagnostics to session", function()
 
         initialize_session_and_switch_to_buffer(bufnr)
         child.lua([[ vim.api.nvim_win_set_cursor(0, {1, 0}) ]])
-        child.lua([[ require("agentic").add_current_line_diagnostics() ]])
+        child.lua([[ require("tend").add_current_line_diagnostics() ]])
         child.flush()
 
         local diagnostics = get_session_diagnostics()
@@ -55,7 +55,7 @@ describe("Add diagnostics to session", function()
         assert.equal(vim.diagnostic.severity.ERROR, diagnostics[1].severity)
 
         local diagnostics_winid = child.lua([[
-            local session = require("agentic.session_registry")
+            local session = require("tend.session_registry")
                 .get_session_for_tab_page()
             return session.widget.win_nrs.diagnostics
         ]])
@@ -91,7 +91,7 @@ describe("Add diagnostics to session", function()
         ]])
 
         initialize_session_and_switch_to_buffer(bufnr)
-        child.lua([[ require("agentic").add_buffer_diagnostics() ]])
+        child.lua([[ require("tend").add_buffer_diagnostics() ]])
         child.flush()
 
         local diagnostics = get_session_diagnostics()
@@ -105,18 +105,18 @@ describe("Add diagnostics to session", function()
     end)
 
     it("Does not show widget when no diagnostics exist", function()
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
-        child.lua([[ require("agentic").close() ]])
+        child.lua([[ require("tend").close() ]])
         child.flush()
 
-        child.lua([[ require("agentic").add_current_line_diagnostics() ]])
+        child.lua([[ require("tend").add_current_line_diagnostics() ]])
         child.flush()
 
         assert.equal(0, #get_session_diagnostics())
 
         local is_open = child.lua([[
-            local session = require("agentic.session_registry").get_session_for_tab_page()
+            local session = require("tend.session_registry").get_session_for_tab_page()
             return session.widget:is_open()
         ]])
         assert.is_false(is_open)

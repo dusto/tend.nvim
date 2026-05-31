@@ -30,12 +30,12 @@ data. `pngpaste` writes PNG data without a correct gamut conversion to sRGB, so
 wide-gamut screenshot pixels become numerically dull while still tagged sRGB.
 
 `jcsalterego/pngpaste` is effectively unmaintained. `ibrikin/pngpaste` is
-macOS-only with low adoption. Keeping `img-clip.nvim` leaves Agentic coupled to
+macOS-only with low adoption. Keeping `img-clip.nvim` leaves Tend coupled to
 platform-specific CLI behaviour it can own directly.
 
 ## Current decision
 
-Agentic owns clipboard image paste through `agentic.ui.clipboard_image`.
+Tend owns clipboard image paste through `tend.ui.clipboard_image`.
 
 The backend uses platform-native tools:
 
@@ -45,10 +45,10 @@ The backend uses platform-native tools:
 - Linux Wayland: `wl-paste`
 - Linux X11: `xclip`
 
-`agentic.ui.clipboard` owns temporary file lifecycle. The backend owns platform
+`tend.ui.clipboard` owns temporary file lifecycle. The backend owns platform
 probing and save.
 
-Drag-and-drop remains terminal behaviour. Agentic does not copy local files into
+Drag-and-drop remains terminal behaviour. Tend does not copy local files into
 a remote filesystem for SSH sessions.
 
 ## Consequences

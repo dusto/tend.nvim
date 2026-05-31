@@ -18,7 +18,7 @@ stable
 - Tightening existing code without changing behavior
 - Adding tests for already-shipped behavior
 
-**Open a [discussion](https://github.com/carlos-algms/agentic.nvim/discussions) (or issue) first:**
+**Open a [discussion](https://github.com/dusto/tend.nvim/discussions) (or issue) first:**
 
 - Anything that adds a new user-facing feature or config option
 - Changes to the chat UI layout, keymaps, or public API
@@ -37,7 +37,7 @@ If in doubt, ask first
   ([spec](https://agentclientprotocol.com/)); `if provider == "foo"`
   branches get rejected - report provider bugs upstream. Only exception:
   documented fallbacks in `ACPClient` for fields missing from the spec
-  (see `lua/agentic/acp/AGENTS.md` -> "Provider quirk handling")
+  (see `lua/tend/acp/AGENTS.md` -> "Provider quirk handling")
 
 ## Prerequisites
 
@@ -95,8 +95,8 @@ The PR has your name on it - be ready to defend every line
 
 1. Read your own diff on GitHub
 2. `make validate` passes cleanly
-3. If you changed `lua/agentic/init.lua`, `config_default.lua`,
-   `theme.lua`, or public keymaps in the README, update `doc/agentic.txt`
+3. If you changed `lua/tend/init.lua`, `config_default.lua`,
+   `theme.lua`, or public keymaps in the README, update `doc/tend.txt`
    (see `AGENTS.md` for the source-to-vimdoc mapping)
 4. If you added a highlight group, update the README "Customization
-   (Ricing)" section and `doc/agentic.txt`
+   (Ricing)" section and `doc/tend.txt`

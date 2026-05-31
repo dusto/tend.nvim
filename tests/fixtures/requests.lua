@@ -5,7 +5,7 @@ M.session_new = {
     jsonrpc = "2.0",
     method = "session/new",
     params = {
-        cwd = "/Users/abc/projects/agentic.nvim",
+        cwd = "/Users/abc/projects/tend.nvim",
         mcpServers = {},
     },
 }

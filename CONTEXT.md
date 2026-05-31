@@ -1,6 +1,6 @@
-# agentic.nvim
+# tend.nvim
 
-Domain glossary for agentic.nvim. Defines terms that are overloaded, ambiguous,
+Domain glossary for tend.nvim. Defines terms that are overloaded, ambiguous,
 or unique to this project. Not a spec. Not a design doc. Implementation
 details belong in `AGENTS.md` (rules) or `docs/adr/` (decisions).
 
@@ -120,7 +120,7 @@ own buffer; renders into the header via `on_change`.
 
 **CodeSelection**:
 Per-**ChatWidget** holder for code ranges the user attached to the prompt
-(`agentic.Selection[]`). Sibling of **FileList**.
+(`tend.Selection[]`). Sibling of **FileList**.
 
 ### Tool calls
 

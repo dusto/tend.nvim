@@ -1,13 +1,13 @@
---- Mock implementation of agentic.acp.ACPTransportModule for testing
---- @class agentic.acp.ACPTransportModuleMock
+--- Mock implementation of tend.acp.ACPTransportModule for testing
+--- @class tend.acp.ACPTransportModuleMock
 local M = {}
 
 --- Create a mock stdio transport for testing
---- @param config agentic.acp.StdioTransportConfig
---- @param callbacks agentic.acp.TransportCallbacks
---- @return agentic.acp.ACPTransportInstance
+--- @param config tend.acp.StdioTransportConfig
+--- @param callbacks tend.acp.TransportCallbacks
+--- @return tend.acp.ACPTransportInstance
 function M.create_stdio_transport(config, callbacks)
-    --- @type agentic.acp.ACPTransportInstance
+    --- @type tend.acp.ACPTransportInstance
     local transport = {
         stdin = nil,
         stdout = nil,

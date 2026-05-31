@@ -33,12 +33,12 @@ describe("Open and Close Chat Widget", function()
     it("Opens the widget with chat and prompt windows", function()
         local initial_winid = child.api.nvim_get_current_win()
 
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
-        -- Should have: empty filetype (original window), AgenticChat, AgenticInput
+        -- Should have: empty filetype (original window), TendChat, TendInput
         local filetypes = get_tabpage_filetypes(0)
-        assert.same({ "", "AgenticChat", "AgenticInput" }, filetypes)
+        assert.same({ "", "TendChat", "TendInput" }, filetypes)
 
         -- 80 - default neovim headless width
         -- 40% of 80 = 32 (chat window)
@@ -49,14 +49,14 @@ describe("Open and Close Chat Widget", function()
     end)
 
     it("toggles the widget to show and hide it", function()
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
-        -- Should have: empty filetype (original window), AgenticChat, AgenticInput
+        -- Should have: empty filetype (original window), TendChat, TendInput
         local filetypes = get_tabpage_filetypes(0)
-        assert.same({ "", "AgenticChat", "AgenticInput" }, filetypes)
+        assert.same({ "", "TendChat", "TendInput" }, filetypes)
 
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
         -- After hide, should only have original window
@@ -65,12 +65,12 @@ describe("Open and Close Chat Widget", function()
     end)
 
     it("Creates independent widgets per tabpage", function()
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
-        -- Tab1 should have: empty filetype, AgenticChat, AgenticInput
+        -- Tab1 should have: empty filetype, TendChat, TendInput
         local tab1_filetypes = get_tabpage_filetypes(0)
-        assert.same({ "", "AgenticChat", "AgenticInput" }, tab1_filetypes)
+        assert.same({ "", "TendChat", "TendInput" }, tab1_filetypes)
 
         local tab1_id = child.api.nvim_get_current_tabpage()
 
@@ -79,15 +79,15 @@ describe("Open and Close Chat Widget", function()
         local tab2_id = child.api.nvim_get_current_tabpage()
         assert.is_not.equal(tab1_id, tab2_id)
 
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
-        -- Tab2 should also have: empty filetype, AgenticChat, AgenticInput
+        -- Tab2 should also have: empty filetype, TendChat, TendInput
         local tab2_filetypes = get_tabpage_filetypes(0)
-        assert.same({ "", "AgenticChat", "AgenticInput" }, tab2_filetypes)
+        assert.same({ "", "TendChat", "TendInput" }, tab2_filetypes)
 
         local session_count = child.lua_get([[
-            vim.tbl_count(require("agentic.session_registry").sessions)
+            vim.tbl_count(require("tend.session_registry").sessions)
         ]])
         assert.equal(2, session_count)
 
@@ -96,21 +96,21 @@ describe("Open and Close Chat Widget", function()
         end)
 
         local session_count_after = child.lua_get([[
-            vim.tbl_count(require("agentic.session_registry").sessions)
+            vim.tbl_count(require("tend.session_registry").sessions)
         ]])
         assert.equal(1, session_count_after)
     end)
 
     it("handles tabclose while in insert mode without errors", function()
         -- Open widget
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
 
         -- Enter insert mode in input buffer (triggers ModeChanged)
         child.cmd("startinsert")
 
         -- Create second tab
         child.cmd("tabnew")
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
 
         local mode = child.fn.mode()
         assert.equal(mode, "i")
@@ -129,7 +129,7 @@ describe("Open and Close Chat Widget", function()
 
         -- Create second tab and open widget there
         child.cmd("tabnew")
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
         -- Ensure cursor is in input buffer
@@ -137,7 +137,7 @@ describe("Open and Close Chat Widget", function()
         local expected_input_bufnr = child.lua_get([[
 (function()
     local tab_id = vim.api.nvim_get_current_tabpage()
-    local session = require("agentic.session_registry").sessions[tab_id]
+    local session = require("tend.session_registry").sessions[tab_id]
     return session.widget.buf_nrs.input
 end)()
 ]])

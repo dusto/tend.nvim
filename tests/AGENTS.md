@@ -1,4 +1,4 @@
-# Testing Guide for agentic.nvim
+# Testing Guide for tend.nvim
 
 **Framework:** mini.test with Busted-style emulation (`emulate_busted = true`).
 Bootstrap is automatic; mini.nvim is cloned into `deps/` on first run.
@@ -66,7 +66,7 @@ docs), say so explicitly in the PR description.
 **Example structure:**
 
 ```text
-lua/agentic/
+lua/tend/
   ├── init.lua
   ├── init.test.lua
   ├── session_manager.lua
@@ -99,7 +99,7 @@ lua/agentic/
 make test
 
 # Run specific test file
-make test-file FILE=lua/agentic/acp/agent_modes.test.lua
+make test-file FILE=lua/tend/acp/agent_modes.test.lua
 ```
 
 ### First Run
@@ -117,11 +117,11 @@ mini.test with `emulate_busted = true` provides familiar Busted syntax:
 local assert = require('tests.helpers.assert')
 
 describe('MyModule', function()
-  --- @type agentic.mymodule add actual existing module type to avoid `any` or `unknown`
+  --- @type tend.mymodule add actual existing module type to avoid `any` or `unknown`
   local MyModule
 
   before_each(function()
-    MyModule = require('agentic.mymodule')
+    MyModule = require('tend.mymodule')
   end)
 
   after_each(function()
@@ -405,7 +405,7 @@ assert.equal('function', type(call_args[2]))
 - **Integration / functional** — `tests/integration/` or `tests/functional/`
   when a test spans multiple modules or needs real Neovim state across them.
   No formal distinction between the two folders.
-- **ACP / transport-touching tests** — MUST stub `agentic.acp.acp_transport`
+- **ACP / transport-touching tests** — MUST stub `tend.acp.acp_transport`
   (or any module that opens a real subprocess / network call). No real
   provider subprocess in tests.
 
@@ -433,7 +433,7 @@ assert.equal('function', type(call_args[2]))
 
 ### Multi-Tabpage Testing
 
-Since agentic.nvim supports **one session instance per tabpage**, tests must
+Since tend.nvim supports **one session instance per tabpage**, tests must
 verify:
 
 - Tabpage isolation (no cross-contamination)
@@ -445,11 +445,11 @@ Example:
 ```lua
 it('maintains separate state per tabpage', function()
   local tab1 = vim.api.nvim_get_current_tabpage()
-  require('agentic').toggle()
+  require('tend').toggle()
 
   vim.cmd('tabnew')
   local tab2 = vim.api.nvim_get_current_tabpage()
-  require('agentic').toggle()
+  require('tend').toggle()
 
   -- Verify both tabpages have independent sessions
 end)
@@ -475,7 +475,7 @@ describe('integration', function()
   end)
 
   it('loads plugin correctly', function()
-    local loaded = child.lua_get([[package.loaded['agentic'] ~= nil]])
+    local loaded = child.lua_get([[package.loaded['tend'] ~= nil]])
     assert.is_true(loaded)
     -- Or: require('mini.test').expect.equality(loaded, true)
   end)
@@ -561,7 +561,7 @@ local filetypes = child.lua([[
 
   ```lua
   -- ❌ WRONG: Silently fails, value is vim.NIL in child
-  child.w[chat_win].agentic_bufnr = chat_buf
+  child.w[chat_win].tend_bufnr = chat_buf
 
   -- ✅ CORRECT: Set via child.lua
   child.lua([[
@@ -705,7 +705,7 @@ assert.is_true(child.b.done)
 ### Debug Specific Test
 
 ```bash
-make test-file FILE=lua/agentic/init.test.lua
+make test-file FILE=lua/tend/init.test.lua
 ```
 
 ## Resources

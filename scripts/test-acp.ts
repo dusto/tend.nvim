@@ -154,7 +154,7 @@ try {
   // 1) Initialize
   const initId = await send('initialize', {
     protocolVersion: 1,
-    clientInfo: { name: 'agentic-nvim-test', version: '0.0.1' },
+    clientInfo: { name: 'tend-nvim-test', version: '0.0.1' },
     clientCapabilities: {},
   });
   const initResp = await waitFor(initId);

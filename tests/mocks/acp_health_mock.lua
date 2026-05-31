@@ -1,5 +1,5 @@
---- Mock implementation of agentic.acp.ACPHealth for testing
---- @class agentic.acp.ACPHealthMock
+--- Mock implementation of tend.acp.ACPHealth for testing
+--- @class tend.acp.ACPHealthMock
 local M = {}
 
 --- Mock: Always return true for configured provider availability

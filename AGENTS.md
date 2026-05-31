@@ -1,14 +1,14 @@
 # Agents Guide
 
-**agentic.nvim** is a Neovim plugin that emulates Cursor AI IDE behavior,
+**tend.nvim** is a Neovim plugin that emulates Cursor AI IDE behavior,
 providing AI-driven code assistance through a chat interface.
 
 ## Nested instructions
 
 Read these before touching the matching area:
 
-- `lua/agentic/acp/AGENTS.md` - ACP client, tool calls, permissions, providers
-- `lua/agentic/ui/AGENTS.md` - chat UI: topology, lifecycle contracts
+- `lua/tend/acp/AGENTS.md` - ACP client, tool calls, permissions, providers
+- `lua/tend/ui/AGENTS.md` - chat UI: topology, lifecycle contracts
   (open/close/destroy), MessageWriter state machines, tool-call block layout,
   folding, auto-scroll, permission reanchor, traps
 - `tests/AGENTS.md` - test framework, TDD workflow, assertions, helpers
@@ -118,7 +118,7 @@ status animation, permission manager, file list, code selection.
 
   ```lua
   -- Module level (shared namespace ID is OK)
-  local NS_ANIMATION = vim.api.nvim_create_namespace("agentic_animation")
+  local NS_ANIMATION = vim.api.nvim_create_namespace("tend_animation")
 
   function Animation:new(bufnr)
       return { bufnr = bufnr }
@@ -129,7 +129,7 @@ status animation, permission manager, file list, code selection.
   ```
 
 - **Highlight groups are GLOBAL** (shared across all tabpages). Defined once in
-  `lua/agentic/theme.lua`. Use namespaces to control WHERE highlights appear,
+  `lua/tend/theme.lua`. Use namespaces to control WHERE highlights appear,
   not to isolate definitions.
 
 - **Scoped storage:** use the correct accessor
@@ -171,11 +171,11 @@ status animation, permission manager, file list, code selection.
   `{ buffer = bufnr }`: the option was renamed to `buf` in Neovim 0.12.1
   (`neovim#38360`) and removed
   in 0.15; the wrappers gate on `has('nvim-0.12.1')`. Regression tests:
-  ``lua/agentic/utils/buf_helpers.test.lua::"uses `buffer`/`buf` opt on Neovim"``.
+  ``lua/tend/utils/buf_helpers.test.lua::"uses `buffer`/`buf` opt on Neovim"``.
 
 ## Public API and call chain
 
-`lua/agentic/init.lua` is the public surface. Anything reached through the call
+`lua/tend/init.lua` is the public surface. Anything reached through the call
 chain inherits the chain's guarantees. Direct access to deeper modules bypasses
 them.
 
@@ -226,7 +226,7 @@ Outside the callback:
 
 ### Public entries (overview)
 
-Source of truth: `lua/agentic/init.lua` exports. Grouped:
+Source of truth: `lua/tend/init.lua` exports. Grouped:
 
 - **Widget lifecycle** — open/close/toggle/rotate_layout.
 - **Context attach** — selection, file(s), diagnostics adders.
@@ -283,7 +283,7 @@ Subsystem-specific traps live in nested `AGENTS.md`. These apply everywhere:
     needed: buffer options have no per-window memory.
   - Reads (`local x = vim.wo[winid].opt`) are unaffected; `[0]` is write-only.
   - Regression:
-    `lua/agentic/ui/buffer_guard.test.lua::"does not leak widget window options to the editor window after redirect"`.
+    `lua/tend/ui/buffer_guard.test.lua::"does not leak widget window options to the editor window after redirect"`.
 - **AVOID: `nvim_set_option_value` / `nvim_get_option_value`** for buffer or
   window options when an idiomatic accessor exists. Use `vim.bo[bufnr].opt` for
   buffer options and `vim.wo[winid][0].opt` for window options. The
@@ -446,7 +446,7 @@ other projects (e.g. `assert` is a custom helper, not `luassert`; spies have no
 Run `make validate` ONLY when `.lua` files changed.
 
 Skip `make validate` for docs-only changes, including `.md`, `.txt`,
-`README.md`, `AGENTS.md`, `doc/agentic.txt`, and
+`README.md`, `AGENTS.md`, `doc/tend.txt`, and
 `docs/adr/`.
 
 Run the narrow doc-specific check instead. For vimdoc changes, run:
@@ -465,10 +465,10 @@ single permission prompt, output redirected to log files automatically.
 Output is 5-6 short lines on success. Example:
 
 ```bash
-format: 0 (took 1s) - log: .local/agentic_format_output.log
-luals: 0 (took 2s) - log: .local/agentic_luals_output.log
-selene: 0 (took 0s) - log: .local/agentic_selene_output.log
-test: 0 (took 1s) - log: .local/agentic_test_output.log
+format: 0 (took 1s) - log: .local/tend_format_output.log
+luals: 0 (took 2s) - log: .local/tend_luals_output.log
+selene: 0 (took 0s) - log: .local/tend_selene_output.log
+test: 0 (took 1s) - log: .local/tend_test_output.log
 Total: 4s
 ```
 
@@ -495,10 +495,10 @@ make validate
 
 Exact paths in project root (NEVER write to different paths):
 
-- `.local/agentic_format_output.log`
-- `.local/agentic_luals_output.log`
-- `.local/agentic_selene_output.log`
-- `.local/agentic_test_output.log`
+- `.local/tend_format_output.log`
+- `.local/tend_luals_output.log`
+- `.local/tend_selene_output.log`
+- `.local/tend_test_output.log`
 
 Only read exit codes from `make validate` output. On failure, read the
 corresponding log file.
@@ -507,10 +507,10 @@ corresponding log file.
 
 - NEVER use the Read tool (floods context with entire file)
 - Use targeted commands:
-  - `tail -n 10 .local/agentic_luals_output.log` (errors usually at end)
-  - `rg "error|warning|fail" .local/agentic_test_output.log` (smart-case)
-  - `grep -i "error" .local/agentic_selene_output.log`
-- If multiple reads needed: `cat .local/agentic_*_output.log` once instead of
+  - `tail -n 10 .local/tend_luals_output.log` (errors usually at end)
+  - `rg "error|warning|fail" .local/tend_test_output.log` (smart-case)
+  - `grep -i "error" .local/tend_selene_output.log`
+- If multiple reads needed: `cat .local/tend_*_output.log` once instead of
   chunked reads
 
 ### Make targets
@@ -525,8 +525,8 @@ More targets: read `Makefile` at project root.
 
 ### Configuration and user-facing docs
 
-- `lua/agentic/config_default.lua` - user-configurable options
-- `lua/agentic/theme.lua` - custom highlight groups
+- `lua/tend/config_default.lua` - user-configurable options
+- `lua/tend/theme.lua` - custom highlight groups
 
 When adding a new highlight group:
 
@@ -534,21 +534,21 @@ When adding a new highlight group:
 2. Define default in `Theme.setup()`
 3. Update README.md "Customization (Ricing)" section (code example + table row)
 
-#### Vimdoc (`doc/agentic.txt`)
+#### Vimdoc (`doc/tend.txt`)
 
 Manually written, NOT auto-generated. When changing these files, vimdoc MUST be
 updated:
 
 | Source file                      | Vimdoc section to update            |
 | -------------------------------- | ----------------------------------- |
-| `lua/agentic/init.lua`           | Usage (public API functions)        |
-| `lua/agentic/config_default.lua` | Configuration, Customization        |
-| `lua/agentic/theme.lua`          | Customization (highlight groups)    |
+| `lua/tend/init.lua`           | Usage (public API functions)        |
+| `lua/tend/config_default.lua` | Configuration, Customization        |
+| `lua/tend/theme.lua`          | Customization (highlight groups)    |
 | `README.md` (install/keymaps)    | Installation, Keymaps, Integrations |
 
-**Format rules:** 78-char width, right-aligned tags `*agentic-section*`, code
-blocks `>lua` / `<`, function tags `*agentic.function_name()*`, cross-refs
-`|agentic-section|`, modeline `vim:tw=78:ts=8:ft=help:norl:`. After editing:
+**Format rules:** 78-char width, right-aligned tags `*tend-section*`, code
+blocks `>lua` / `<`, function tags `*tend.function_name()*`, cross-refs
+`|tend-section|`, modeline `vim:tw=78:ts=8:ft=help:norl:`. After editing:
 `timeout 5 nvim --headless -c "helptags doc/" -c "quit"`.
 
 ### Git workflow

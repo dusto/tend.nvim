@@ -574,8 +574,10 @@ blocks `>lua` / `<`, function tags `*tend.function_name()*`, cross-refs
 #### Pull requests
 
 - `main` is protected by a repository ruleset: **PRs required**, force-push and
-  branch deletion blocked. Inherited CI workflows are **under review and not yet
-  enabled**.
+  branch deletion blocked, with **required status checks** — `format`, `lint`,
+  `test`/`typecheck` on stable Neovim (v0.11.5 + v0.12.1), and the conventional
+  PR title — that must pass to merge. (`nightly` runs but is not required.)
+  CI (`pr-check.yml`) runs on every PR.
 - Self-review and run `make validate` before opening / marking a PR ready.
 - PR title must follow Conventional Commits (squash-merge uses the title as the
   commit subject). Branch names: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`

@@ -9,7 +9,7 @@ load(
 require("lazy.minit").repro({
     spec = {
         {
-            name = "agentic.nvim",
+            name = "tend.nvim",
             dir = vim.fn.fnamemodify(vim.uv.cwd() or "", ":h"),
 
             opts = {},
@@ -18,9 +18,9 @@ require("lazy.minit").repro({
                 {
                     "<C-\\>",
                     function()
-                        require("agentic").toggle()
+                        require("tend").toggle()
                     end,
-                    desc = "Agentic Open",
+                    desc = "Tend Open",
                     silent = true,
                     mode = { "n", "v", "i" },
                 },
@@ -28,9 +28,9 @@ require("lazy.minit").repro({
                 {
                     "<C-'>",
                     function()
-                        require("agentic").add_selection_or_file_to_context()
+                        require("tend").add_selection_or_file_to_context()
                     end,
-                    desc = "Agentic Add Selection to context",
+                    desc = "Tend Add Selection to context",
                     silent = true,
                     mode = { "n", "v" },
                 },
@@ -38,9 +38,9 @@ require("lazy.minit").repro({
                 {
                     "<C-,>",
                     function()
-                        require("agentic").new_session()
+                        require("tend").new_session()
                     end,
-                    desc = "Agentic New Session",
+                    desc = "Tend New Session",
                     silent = true,
                     mode = { "n", "v", "i" },
                 },

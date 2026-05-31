@@ -1,0 +1,258 @@
+local assert = require("tests.helpers.assert")
+local spy = require("tests.helpers.spy")
+
+local FilePicker = require("tend.ui.file_picker")
+
+--- Computes the differences between two tables
+--- @param left table
+--- @param right table
+--- @return string[] only_in_left Items only in left table
+--- @return string[] only_in_right Items only in right table
+local function table_diff(left, right)
+    local left_set = {}
+    for _, v in ipairs(left) do
+        left_set[v] = true
+    end
+
+    local right_set = {}
+    for _, v in ipairs(right) do
+        right_set[v] = true
+    end
+
+    local only_in_left = {}
+    for _, v in ipairs(left) do
+        if not right_set[v] then
+            table.insert(only_in_left, v)
+        end
+    end
+
+    local only_in_right = {}
+    for _, v in ipairs(right) do
+        if not left_set[v] then
+            table.insert(only_in_right, v)
+        end
+    end
+
+    return only_in_left, only_in_right
+end
+
+describe("FilePicker:scan_files", function()
+    --- @type TestStub|nil
+    local system_stub
+    local original_cmd_rg
+    local original_cmd_fd
+    local original_cmd_git
+
+    --- @type tend.ui.FilePicker
+    local picker
+
+    before_each(function()
+        original_cmd_rg = FilePicker.CMD_RG[1]
+        original_cmd_fd = FilePicker.CMD_FD[1]
+        original_cmd_git = FilePicker.CMD_GIT[1]
+        picker = FilePicker:new(vim.api.nvim_create_buf(false, true)) --[[@as tend.ui.FilePicker]]
+    end)
+
+    after_each(function()
+        if system_stub then
+            system_stub:revert()
+            system_stub = nil
+        end
+        FilePicker.CMD_RG[1] = original_cmd_rg
+        FilePicker.CMD_FD[1] = original_cmd_fd
+        FilePicker.CMD_GIT[1] = original_cmd_git
+    end)
+
+    describe("mocked commands", function()
+        it("should stop at first successful command", function()
+            -- Make all commands available by setting them to executables that exist
+            FilePicker.CMD_RG[1] = "echo"
+            FilePicker.CMD_FD[1] = "echo"
+            FilePicker.CMD_GIT[1] = "echo"
+
+            system_stub = spy.stub(vim.fn, "system")
+            system_stub:invokes(function(_cmd)
+                -- First call returns empty (simulates failure)
+                -- Second call returns files (simulates success)
+                if system_stub.call_count == 1 then
+                    return ""
+                else
+                    return "file1.lua\nfile2.lua\nfile3.lua\n"
+                end
+            end)
+
+            local files = picker:scan_files()
+
+            -- Should have called system exactly 2 times (first fails, second succeeds)
+            assert.equal(2, system_stub.call_count)
+            assert.equal(3, #files)
+        end)
+    end)
+
+    describe("real commands", function()
+        local original_exclude_patterns
+
+        before_each(function()
+            original_exclude_patterns =
+                vim.tbl_extend("force", {}, FilePicker.GLOB_EXCLUDE_PATTERNS)
+        end)
+
+        after_each(function()
+            FilePicker.GLOB_EXCLUDE_PATTERNS = original_exclude_patterns
+        end)
+
+        it("should return same files in same order for all commands", function()
+            -- Test rg
+            FilePicker.CMD_RG[1] = original_cmd_rg
+            FilePicker.CMD_FD[1] = "nonexistent_fd"
+            FilePicker.CMD_GIT[1] = "nonexistent_git"
+            local files_rg = picker:scan_files()
+
+            -- Test fd
+            FilePicker.CMD_RG[1] = "nonexistent_rg"
+            FilePicker.CMD_FD[1] = original_cmd_fd
+            FilePicker.CMD_GIT[1] = "nonexistent_git"
+            local files_fd = picker:scan_files()
+
+            -- Test git
+            FilePicker.CMD_RG[1] = "nonexistent_rg"
+            FilePicker.CMD_FD[1] = "nonexistent_fd"
+            FilePicker.CMD_GIT[1] = original_cmd_git
+            local files_git = picker:scan_files()
+
+            -- All commands should return more than 0 files
+            assert.is_true(#files_rg > 0)
+            assert.is_true(#files_fd > 0)
+            assert.is_true(#files_git > 0)
+
+            -- Extract just the word (filename) for comparison
+            local words_rg = vim.tbl_map(function(f)
+                return f.word
+            end, files_rg)
+            local words_fd = vim.tbl_map(function(f)
+                return f.word
+            end, files_fd)
+            local words_git = vim.tbl_map(function(f)
+                return f.word
+            end, files_git)
+
+            local rg_only, fd_only = table_diff(words_rg, words_fd)
+            assert.are.same(rg_only, fd_only)
+
+            local fd_only2, git_only = table_diff(words_fd, words_git)
+            assert.are.same(fd_only2, git_only)
+
+            assert.are.equal(#files_rg, #files_fd)
+            assert.are.equal(#files_fd, #files_git)
+        end)
+
+        it("should use glob fallback when all commands fail", function()
+            -- First, get files from rg for comparison
+            FilePicker.CMD_RG[1] = original_cmd_rg
+            FilePicker.CMD_FD[1] = "nonexistent_fd"
+            FilePicker.CMD_GIT[1] = "nonexistent_git"
+            local files_rg = picker:scan_files()
+
+            -- Disable all commands to force glob fallback
+            FilePicker.CMD_RG[1] = "nonexistent_rg"
+            FilePicker.CMD_FD[1] = "nonexistent_fd"
+            FilePicker.CMD_GIT[1] = "nonexistent_git"
+
+            -- deps is the temp folder where mini.nvim is installed during tests
+            table.insert(FilePicker.GLOB_EXCLUDE_PATTERNS, "deps/")
+            -- lazy_repro is the temp folder where plugins are installed during tests
+            table.insert(FilePicker.GLOB_EXCLUDE_PATTERNS, "lazy_repro/")
+            -- .local is the folder where Neovim is installed during tests in CI
+            table.insert(FilePicker.GLOB_EXCLUDE_PATTERNS, "%.local/")
+            -- settings.local.json is gitignored but glob fallback doesn't respect .gitignore
+            table.insert(
+                FilePicker.GLOB_EXCLUDE_PATTERNS,
+                "settings%.local%.json"
+            )
+            -- Local headless Neovim runs can create nvim.log after rg scanned.
+            table.insert(FilePicker.GLOB_EXCLUDE_PATTERNS, "nvim%.log$")
+            -- .opencode/.gitignore ignores specific files (bun.lock, package.json, etc.)
+            -- rg/fd/git respect nested .gitignore but glob fallback doesn't
+            table.insert(FilePicker.GLOB_EXCLUDE_PATTERNS, "%.opencode/bun")
+            table.insert(FilePicker.GLOB_EXCLUDE_PATTERNS, "%.opencode/package")
+            table.insert(
+                FilePicker.GLOB_EXCLUDE_PATTERNS,
+                "%.opencode/%.gitignore"
+            )
+
+            local files_glob = picker:scan_files()
+
+            assert.is_true(#files_glob > 0)
+
+            -- Extract just the word (filename) for comparison
+            local words_rg = vim.tbl_map(function(f)
+                return f.word
+            end, files_rg)
+            local words_glob = vim.tbl_map(function(f)
+                return f.word
+            end, files_glob)
+
+            local rg_only, glob_only = table_diff(words_rg, words_glob)
+            assert.are.same(rg_only, glob_only)
+
+            assert.are.equal(#words_rg, #words_glob)
+        end)
+    end)
+end)
+
+describe("FilePicker keymap fallback", function()
+    local child = require("tests.helpers.child").new()
+
+    --- Setup a tracking expr keymap using vimscript (fully typed, no child.lua needed)
+    --- @param key string The key to map (e.g., "<Tab>", "<CR>")
+    --- @param global_name string The global variable name (g:) to track calls
+    local function setup_tracking_keymap(key, global_name)
+        child.g[global_name] = false
+        -- vimscript expr: execute() returns "" on success, concat with return value
+        local rhs = ("execute('let g:%s = v:true') .. '%s_CALLED'"):format(
+            global_name,
+            key:upper():gsub("[<>]", "")
+        )
+        child.api.nvim_set_keymap("i", key, rhs, { expr = true })
+    end
+
+    --- Load FilePicker in child process to void polluting main test env
+    local function load_file_picker()
+        child.lua([[require("tend.ui.file_picker"):new(0)]])
+    end
+
+    before_each(function()
+        child.setup()
+    end)
+
+    after_each(function()
+        child.stop()
+    end)
+
+    it("should accept completion when completion menu is visible", function()
+        local prop_name = "tab_called"
+        setup_tracking_keymap("<Tab>", prop_name)
+        load_file_picker()
+
+        -- Set up buffer with multiple completion candidates
+        child.api.nvim_buf_set_lines(
+            0,
+            0,
+            -1,
+            false,
+            { "hello help helicopter", "" }
+        )
+        child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+        -- Type partial word and trigger keyword completion
+        child.type_keys("i", "hel", "<C-x><C-n>")
+
+        -- Verify completion menu is actually visible
+        assert.equal(1, child.fn.pumvisible())
+
+        -- Now press Tab while menu is visible - should accept completion, not call fallback
+        child.type_keys("<Tab>")
+
+        assert.is_false(child.g[prop_name])
+    end)
+end)

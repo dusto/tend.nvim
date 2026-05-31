@@ -22,7 +22,7 @@ The image is optimized through several techniques:
 ## Build
 
 ```bash
-docker build -t agentic-nvim-dev repro/
+docker build -t tend-nvim-dev repro/
 ```
 
 ## Usage
@@ -30,26 +30,26 @@ docker build -t agentic-nvim-dev repro/
 ### Interactive Shell
 
 ```bash
-docker run --rm -it -v "`pwd`:/workspace" agentic-nvim-dev
+docker run --rm -it -v "`pwd`:/workspace" tend-nvim-dev
 ```
 
 ### Run PR Checks
 
 ```bash
 # Type checking
-docker run --rm -v "`pwd`:/workspace" agentic-nvim-dev make luals
+docker run --rm -v "`pwd`:/workspace" tend-nvim-dev make luals
 
 # Linting
-docker run --rm -v "`pwd`:/workspace" agentic-nvim-dev make selene
+docker run --rm -v "`pwd`:/workspace" tend-nvim-dev make selene
 
 # Format checking
-docker run --rm -v "`pwd`:/workspace" agentic-nvim-dev make format-check
+docker run --rm -v "`pwd`:/workspace" tend-nvim-dev make format-check
 ```
 
 ### Run All Checks
 
 ```bash
-docker run --rm -v "`pwd`:/workspace" agentic-nvim-dev sh -c "make luals && make selene && make format-check"
+docker run --rm -v "`pwd`:/workspace" tend-nvim-dev sh -c "make luals && make selene && make format-check"
 ```
 
 ## Notes

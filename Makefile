@@ -55,21 +55,21 @@ validate:
 	@mkdir -p .local; \
 	total_start=$$(date +%s); \
 	start=$$(date +%s); \
-	make format > .local/agentic_format_output.log 2>&1; \
+	make format > .local/tend_format_output.log 2>&1; \
 	rc_format=$$?; \
-	echo "format: $$rc_format (took $$(($$(date +%s) - start))s) - log: .local/agentic_format_output.log"; \
+	echo "format: $$rc_format (took $$(($$(date +%s) - start))s) - log: .local/tend_format_output.log"; \
 	start=$$(date +%s); \
-	make luals > .local/agentic_luals_output.log 2>&1; \
+	make luals > .local/tend_luals_output.log 2>&1; \
 	rc_luals=$$?; \
-	echo "luals: $$rc_luals (took $$(($$(date +%s) - start))s) - log: .local/agentic_luals_output.log"; \
+	echo "luals: $$rc_luals (took $$(($$(date +%s) - start))s) - log: .local/tend_luals_output.log"; \
 	start=$$(date +%s); \
-	make selene > .local/agentic_selene_output.log 2>&1; \
+	make selene > .local/tend_selene_output.log 2>&1; \
 	rc_selene=$$?; \
-	echo "selene: $$rc_selene (took $$(($$(date +%s) - start))s) - log: .local/agentic_selene_output.log"; \
+	echo "selene: $$rc_selene (took $$(($$(date +%s) - start))s) - log: .local/tend_selene_output.log"; \
 	start=$$(date +%s); \
-	make test > .local/agentic_test_output.log 2>&1; \
+	make test > .local/tend_test_output.log 2>&1; \
 	rc_test=$$?; \
-	echo "test: $$rc_test (took $$(($$(date +%s) - start))s) - log: .local/agentic_test_output.log"; \
+	echo "test: $$rc_test (took $$(($$(date +%s) - start))s) - log: .local/tend_test_output.log"; \
 	echo "Total: $$(($$(date +%s) - total_start))s"; \
 	if [ $$rc_format -ne 0 ] || [ $$rc_luals -ne 0 ] || [ $$rc_selene -ne 0 ] || [ $$rc_test -ne 0 ]; then \
 		echo "Validation failed! Check log files for details."; \

@@ -1,5 +1,5 @@
 --- Shared test helpers for the permission section (button rows + status row).
---- @class agentic.tests.helpers.PermissionSection
+--- @class tend.tests.helpers.PermissionSection
 local M = {}
 
 --- Return the K button rows above the status row (empty when k = 0).
@@ -49,7 +49,7 @@ function M.button_row_extmarks(bufnr, end_row, k)
         return {}
     end
     local bottom_pad_row = end_row - k - 1
-    local ns = vim.api.nvim_create_namespace("agentic_status_footer")
+    local ns = vim.api.nvim_create_namespace("tend_status_footer")
     return vim.api.nvim_buf_get_extmarks(
         bufnr,
         ns,

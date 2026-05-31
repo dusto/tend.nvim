@@ -3,7 +3,7 @@
 local MiniTest = require("mini.test")
 
 --- @class tests.helpers.Child : MiniTest.child
---- @field setup fun() Restart child and load plugin and run agentic.setup() to run auto commands and configurations
+--- @field setup fun() Restart child and load plugin and run tend.setup() to run auto commands and configurations
 --- @field flush fun() Flush pending scheduled callbacks in child neovim and wait a bit to ensure they are processed
 
 --- @class tests.helpers.ChildModule
@@ -21,16 +21,16 @@ function M.new()
 
         child.lua([[
             local ACPTransportMock = require("tests.mocks.acp_transport_mock")
-            package.loaded["agentic.acp.acp_transport"] = ACPTransportMock
+            package.loaded["tend.acp.acp_transport"] = ACPTransportMock
         ]])
 
         child.lua([[
             local ACPHealthMock = require("tests.mocks.acp_health_mock")
-            package.loaded["agentic.acp.acp_health"] = ACPHealthMock
+            package.loaded["tend.acp.acp_health"] = ACPHealthMock
         ]])
 
         child.lua([[
-            require("agentic").setup()
+            require("tend").setup()
         ]])
     end
 

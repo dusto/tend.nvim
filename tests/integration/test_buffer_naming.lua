@@ -20,7 +20,7 @@ describe("Buffer Naming", function()
             [[
 (function()
     local tab_id = vim.api.nvim_get_current_tabpage()
-    local session = require("agentic.session_registry").sessions[tab_id]
+    local session = require("tend.session_registry").sessions[tab_id]
     return vim.api.nvim_buf_get_name(session.widget.buf_nrs.%s)
 end)()
 ]],
@@ -32,22 +32,22 @@ end)()
     end
 
     it("buffer names mirror header titles", function()
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
         local basename = get_panel_basename("chat")
 
-        assert.is_true(vim.startswith(basename, "󰻞 Agentic Chat"))
+        assert.is_true(vim.startswith(basename, "󰻞 Tend Chat"))
     end)
 
     it("adds tab suffix for multiple instances", function()
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
         local tab1_basename = get_panel_basename("input")
 
         child.cmd("tabnew")
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
         local tab2_basename = get_panel_basename("input")
@@ -66,24 +66,24 @@ end)()
 
     it("prevents buffer name collision errors", function()
         for _ = 1, 5 do
-            child.lua([[ require("agentic").toggle() ]])
+            child.lua([[ require("tend").toggle() ]])
             child.flush()
             child.cmd("tabnew")
         end
 
         local session_count = child.lua_get([[
-            vim.tbl_count(require("agentic.session_registry").sessions)
+            vim.tbl_count(require("tend.session_registry").sessions)
         ]])
 
         assert.equal(5, session_count)
     end)
 
     it("each panel has distinct buffer name prefix", function()
-        child.lua([[ require("agentic").toggle() ]])
+        child.lua([[ require("tend").toggle() ]])
         child.flush()
 
         local expected_prefixes = {
-            chat = "󰻞 Agentic Chat",
+            chat = "󰻞 Tend Chat",
             input = "󰦨 Prompt",
         }
 

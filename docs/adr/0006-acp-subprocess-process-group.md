@@ -28,7 +28,7 @@ detached flag maps to `DETACHED_PROCESS` there and process groups behave
 differently.
 
 Regression test:
-``lua/agentic/acp/acp_transport.test.lua::"kills descendant processes when wrapper does not forward signals"``.
+``lua/tend/acp/acp_transport.test.lua::"kills descendant processes when wrapper does not forward signals"``.
 
 ## Consequences
 

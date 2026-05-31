@@ -1,11 +1,11 @@
 ---
 name: github-discussion
-description: Use when creating, listing, or managing GitHub discussions in carlos-algms/agentic.nvim repository
+description: Use when creating, listing, or managing GitHub discussions in dusto/tend.nvim repository
 ---
 
 # GitHub Discussion
 
-Manage discussions in **carlos-algms/agentic.nvim** via GraphQL API.
+Manage discussions in **dusto/tend.nvim** via GraphQL API.
 
 ## IDs Reference
 
@@ -68,7 +68,7 @@ mutation {
 ```bash
 gh api graphql -f query='
 {
-  repository(owner: "carlos-algms", name: "agentic.nvim") {
+  repository(owner: "dusto", name: "tend.nvim") {
     discussions(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
       nodes {
         id
@@ -88,7 +88,7 @@ Filter by category:
 ```bash
 gh api graphql -f query='
 {
-  repository(owner: "carlos-algms", name: "agentic.nvim") {
+  repository(owner: "dusto", name: "tend.nvim") {
     discussions(first: 10, categoryId: "DIC_kwDOQXqKi84C1alw") {
       nodes { number title url }
     }
@@ -158,7 +158,7 @@ Get discussion ID first, then add comment using variables to avoid escaping:
 # Get discussion ID
 gh api graphql -f query='
 {
-  repository(owner: "carlos-algms", name: "agentic.nvim") {
+  repository(owner: "dusto", name: "tend.nvim") {
     discussion(number: 108) {
       id
     }
@@ -204,5 +204,5 @@ mutation {
 
 - **Escape quotes** in body: use `\"` for literal quotes
 - **No native command**: `gh discussion` doesn't exist
-- **Repo owner**: `carlos-algms` (not `carlos.gomes`)
+- **Repo owner**: `dusto`
 - Return the discussion URL when done

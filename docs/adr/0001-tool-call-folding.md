@@ -28,7 +28,7 @@ next `show`.
 ## Current decision
 
 `foldmethod=manual` plus anchor pads. Block layout (header + anchor pads +
-body + trailing) is documented in `lua/agentic/ui/AGENTS.md` "Tool-call block
+body + trailing) is documented in `lua/tend/ui/AGENTS.md` "Tool-call block
 layout".
 
 Body updates replace lines strictly between the anchors; header is rewritten on
@@ -64,7 +64,7 @@ anchor pads as provider output, so it counts toward `Fold.should_fold`.
 - O(1) per fold transition instead of O(N).
 - ~300 lines of foldexpr machinery removed.
 - The per-block row contract (header / top_pad / body / bottom_pad / trailing,
-  pads MUST be `""`) is the layout invariant — see `lua/agentic/ui/AGENTS.md`
+  pads MUST be `""`) is the layout invariant — see `lua/tend/ui/AGENTS.md`
   "Tool-call block layout".
 - Anchor pads are unconditional. `MessageWriter:update_tool_call_block` slices
   body at fixed offsets `[3, #lines-2]`. Drop the pads and folds die on body

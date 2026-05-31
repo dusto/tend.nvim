@@ -1,18 +1,18 @@
 local assert = require("tests.helpers.assert")
-local Config = require("agentic.config")
-local ChatWidget = require("agentic.ui.chat_widget")
-local MessageWriter = require("agentic.ui.message_writer")
-local ToolCallBlocks = require("agentic.ui.tool_call_blocks")
+local Config = require("tend.config")
+local ChatWidget = require("tend.ui.chat_widget")
+local MessageWriter = require("tend.ui.message_writer")
+local ToolCallBlocks = require("tend.ui.tool_call_blocks")
 
 describe("Tool block borders", function()
-    --- @type agentic.UserConfig.Folding|nil
+    --- @type tend.UserConfig.Folding|nil
     local saved_folding
     local saved_columns
     local saved_lines
     local tabpage
-    --- @type agentic.ui.ChatWidget|nil
+    --- @type tend.ui.ChatWidget|nil
     local widget
-    --- @type agentic.ui.MessageWriter|nil
+    --- @type tend.ui.MessageWriter|nil
     local writer
 
     before_each(function()

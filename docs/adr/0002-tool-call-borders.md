@@ -23,7 +23,7 @@ lives in `glyph_for_line`, range lookup in `block_range_at_row`
 
 - Column setup lives in `WidgetLayout.PANEL_WINDOW_OPTS`, NOT `style="minimal"`
   — `style="minimal"` is forbidden on panel windows (wipes manual folds across
-  reopens, see `lua/agentic/ui/AGENTS.md` Traps).
+  reopens, see `lua/tend/ui/AGENTS.md` Traps).
 - Window-local. No interference with user statuscolumn plugins.
 - No cache. Stateless. Write cost zero.
 

@@ -144,9 +144,9 @@ pending block does not, so we additionally scan trackers (short-circuiting on
 Three HL groups, defined with backgrounds (button-fill look, not text-color):
 
 ```text
-AgenticPermissionButtonAllow    bg = #2d5a3d (status_completed_bg), bold
-AgenticPermissionButtonReject   bg = #7a2d2d (status_failed_bg),    bold
-AgenticPermissionButtonInactive bg = #3a3a3a
+TendPermissionButtonAllow    bg = #2d5a3d (status_completed_bg), bold
+TendPermissionButtonReject   bg = #7a2d2d (status_failed_bg),    bold
+TendPermissionButtonInactive bg = #3a3a3a
 ```
 
 Each button row gets one full-row segment covering byte cols

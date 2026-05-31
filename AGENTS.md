@@ -1,7 +1,19 @@
 # Agents Guide
 
-**tend.nvim** is a Neovim plugin that emulates Cursor AI IDE behavior,
-providing AI-driven code assistance through a chat interface.
+**tend.nvim** is the Neovim client for **TEND** (Tasked Editor-Native Delegation).
+It is the editor UX for the `tend` daemon (`tendd`): it renders chat, tool-call
+blocks, approvals/permissions, and diffs, and forwards editor-local actions. The
+**daemon** — not this plugin — owns ACP provider processes, task-scoped sessions,
+the event bus, and approvals, over a bidirectional JSON-RPC 2.0 Unix socket. The
+daemon and the wire contract live in [dusto/tend](https://github.com/dusto/tend).
+
+> **Architecture in transition.** The current code still embeds an in-plugin ACP +
+> session runtime (`lua/tend/acp`, `session_manager`/`session_registry`) inherited
+> from the upstream fork. That runtime is being **replaced** by a thin daemon
+> JSON-RPC client (the daemon becomes the source of truth), porting behavior piece
+> by piece. Until then, the ACP / session / "Multi-Tabpage" sections below describe
+> the **present** code accurately — read them for current work, but expect them to
+> change as the client lands. The chat/diff/tool-call **UI primitives are kept**.
 
 ## Nested instructions
 
@@ -72,8 +84,8 @@ turn it into a spec, scratchpad, or design doc.
   rules (formatting, naming, docs) are exempt.
 - Fenced code blocks MUST have a language hint. Use `text` for free-form ASCII
   (trees, byte layouts, pseudocode), `mermaid` for diagrams, and the actual
-  language otherwise (`lua`, `bash`, `markdown`, etc.). CodeRabbit /
-  markdownlint flag bare fences (MD040).
+  language otherwise (`lua`, `bash`, `markdown`, etc.). markdownlint flags bare
+  fences (MD040).
 
 ## CRITICAL: No Assumptions - Gather Context First
 
@@ -561,11 +573,13 @@ blocks `>lua` / `<`, function tags `*tend.function_name()*`, cross-refs
 
 #### Pull requests
 
-- **ALWAYS open PRs as draft.** CodeRabbit runs on every push to a non-draft PR
-  and hits rate limits during iteration. Flip to "ready for review" only after
-  self-review and `make validate` pass.
-- PR title must follow Conventional Commits (repo squashes at merge, title
-  becomes commit subject).
+- `main` is protected by a repository ruleset: **PRs required**, force-push and
+  branch deletion blocked. Inherited CI workflows are **under review and not yet
+  enabled**.
+- Self-review and run `make validate` before opening / marking a PR ready.
+- PR title must follow Conventional Commits (squash-merge uses the title as the
+  commit subject). Branch names: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`
+  + kebab-case — never prefix with task keys.
 
 ### Local-only artifacts
 

@@ -1,9 +1,9 @@
 # Contributing
 
-**Always open PRs as draft.** CodeRabbit runs on every push to non-draft PRs
-and hits rate limits on iteration. Flip to ready when the branch is
-stable
-
+- Work on a feature branch; `main` requires a PR (force-push and deletion are
+  blocked by a ruleset).
+- Run `make validate` and self-review before opening a PR.
+- PR title follows Conventional Commits (squash-merge uses it as the commit subject).
 - Fill in the description with **what** changed and **why**
 - Link related issues
 - The repo squashes at merge, so the final title + description matter

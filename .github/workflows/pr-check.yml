@@ -3,25 +3,8 @@ name: PR Checks
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'lua/**'
-      - 'tests/**'
-      - 'Makefile'
-      - '.luarc.json'
-      - 'stylua.toml'
-      - 'selene.toml'
-      - 'vim.toml'
-      - '.github/workflows/pr-check.yml'
   push:
     branches: [main]
-    paths:
-      - 'lua/**'
-      - 'tests/**'
-      - 'Makefile'
-      - '.luarc.json'
-      - 'stylua.toml'
-      - 'selene.toml'
-      - 'vim.toml'
   workflow_dispatch:
 
 concurrency:

@@ -1,4 +1,5 @@
 local assert = require("tests.helpers.assert")
+local Child = require("tests.helpers.child")
 local rpc = require("tend.rpc.client")
 
 -- A fake transport: captures every framed message the client sends, decoded.
@@ -219,82 +220,94 @@ describe("tend.rpc.client framing", function()
     end)
 end)
 
+-- connect() drives dispatch and callbacks through vim.schedule, so this is a
+-- child-process test: vim.wait()/vim.uv.sleep() in the same process can't
+-- reliably flush scheduled work (and can silently skip the test). The child
+-- runs an in-process JSON-RPC peer plus the client; the parent flushes the
+-- child's event loop and asserts on state the callbacks stored in vim.g.
 describe("tend.rpc.client over a real unix socket", function()
-    it("round-trips a request through connect()", function()
-        local uv = vim.uv or vim.loop
-        local dir = vim.fn.tempname()
-        vim.fn.mkdir(dir, "p")
-        local path = dir .. "/test.sock"
+    local child = Child.new()
 
-        -- A minimal in-process JSON-RPC peer: replies to "echo" with its params.
-        local server = uv.new_pipe(false)
-        if not server then
-            error("failed to create server pipe")
-        end
-        server:bind(path)
-        local peer_conns = {}
-        server:listen(16, function()
-            local conn = uv.new_pipe(false)
-            if not conn then
-                return
+    before_each(function()
+        child.setup()
+    end)
+
+    after_each(function()
+        child.stop()
+    end)
+
+    it("round-trips through connect() outside fast-event context", function()
+        -- A minimal JSON-RPC peer replies to any request by echoing its params.
+        -- The peer's pipes and the client are kept in _G so they outlive this
+        -- child.lua call; the callbacks record state in vim.g for the parent.
+        child.lua([[
+            local rpc = require("tend.rpc.client")
+            local uv = vim.uv or vim.loop
+            local dir = vim.fn.tempname()
+            vim.fn.mkdir(dir, "p")
+            local path = dir .. "/test.sock"
+
+            local server = uv.new_pipe(false)
+            if not server then
+                error("failed to create server pipe")
             end
-            table.insert(peer_conns, conn)
-            server:accept(conn)
-            local buf = ""
-            conn:read_start(function(_, data)
-                if not data then
+            server:bind(path)
+            _G.tend_test_conns = {}
+            server:listen(16, function()
+                local conn = uv.new_pipe(false)
+                if not conn then
                     return
                 end
-                buf = buf .. data
-                local lines = vim.split(buf, "\n", { plain = true })
-                buf = lines[#lines]
-                for i = 1, #lines - 1 do
-                    if vim.trim(lines[i]) ~= "" then
-                        local msg = vim.json.decode(lines[i])
-                        conn:write(vim.json.encode({
-                            jsonrpc = "2.0",
-                            id = msg.id,
-                            result = msg.params,
-                        }) .. "\n")
+                table.insert(_G.tend_test_conns, conn)
+                server:accept(conn)
+                local buf = ""
+                conn:read_start(function(_, data)
+                    if not data then
+                        return
                     end
-                end
+                    buf = buf .. data
+                    local lines = vim.split(buf, "\n", { plain = true })
+                    buf = lines[#lines]
+                    for i = 1, #lines - 1 do
+                        if vim.trim(lines[i]) ~= "" then
+                            local msg = vim.json.decode(lines[i])
+                            conn:write(vim.json.encode({
+                                jsonrpc = "2.0",
+                                id = msg.id,
+                                result = msg.params,
+                            }) .. "\n")
+                        end
+                    end
+                end)
             end)
-        end)
+            _G.tend_test_server = server
 
-        -- Record state instead of asserting inside the async callbacks (an
-        -- assertion that fires there can be swallowed); assert synchronously
-        -- after the wait. Capture vim.in_fast_event() to prove the connect
-        -- callback and the reply callback both run in the main loop, where
-        -- handlers are free to use vim.api.
-        local connect_err = "unset"
-        local connect_fast, reply_fast
-        local client, result
-        rpc.connect({ path = path }, function(c, err)
-            connect_err = err
-            connect_fast = vim.in_fast_event()
-            client = c
-            c:request("echo", { hello = "world" }, function(_, r)
-                reply_fast = vim.in_fast_event()
-                result = r
+            rpc.connect({ path = path }, function(c, err)
+                vim.g.tend_connect_ok = err == nil
+                vim.g.tend_connect_fast = vim.in_fast_event()
+                _G.tend_test_client = c
+                c:request("echo", { hello = "world" }, function(_, r)
+                    vim.g.tend_reply_fast = vim.in_fast_event()
+                    vim.g.tend_test_result = r
+                end)
             end)
-        end)
+        ]])
 
-        vim.wait(2000, function()
-            return result ~= nil
-        end, 10)
-        assert.is_nil(connect_err)
-        assert.is_false(connect_fast)
-        assert.is_false(reply_fast)
-        assert.same(result, { hello = "world" })
-
-        if client then
-            client:close()
-        end
-        for _, conn in ipairs(peer_conns) do
-            if not conn:is_closing() then
-                conn:close()
+        -- Flush the child's event loop until the reply callback stores a result.
+        local result
+        for _ = 1, 200 do
+            child.flush()
+            vim.uv.sleep(10)
+            result = child.lua_get("vim.g.tend_test_result")
+            if result ~= vim.NIL then
+                break
             end
         end
-        server:close()
+
+        assert.same(result, { hello = "world" })
+        assert.is_true(child.lua_get("vim.g.tend_connect_ok"))
+        -- The callbacks ran on the main loop, where vim.api is available.
+        assert.is_false(child.lua_get("vim.g.tend_connect_fast"))
+        assert.is_false(child.lua_get("vim.g.tend_reply_fast"))
     end)
 end)

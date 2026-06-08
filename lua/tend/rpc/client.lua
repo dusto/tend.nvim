@@ -220,6 +220,13 @@ end
 --- @field on_disconnect? fun()
 
 --- Connect to the daemon over a Unix socket and return a wired Client.
+---
+--- libuv runs its `connect`/`read_start` callbacks in Neovim's fast-event
+--- context, where most of the `vim.api` is unavailable. Since dispatched
+--- handlers and reply callbacks routinely touch the editor, every transition
+--- back into client/user code here is deferred via `vim.schedule`, so the whole
+--- public surface (the connect cb, request/notification handlers, response
+--- callbacks, on_error, on_disconnect) runs in the main loop.
 --- @param opts tend.rpc.ConnectOpts
 --- @param cb fun(client: tend.rpc.Client?, err: string?)
 function M.connect(opts, cb)
@@ -227,16 +234,21 @@ function M.connect(opts, cb)
     local path = opts.path or M.socket_path()
     local pipe = uv.new_pipe(false)
     if not pipe then
-        cb(nil, "tend.rpc: failed to create pipe")
+        vim.schedule(function()
+            cb(nil, "tend.rpc: failed to create pipe")
+        end)
         return
     end
     pipe:connect(path, function(err)
         if err then
             pipe:close()
-            cb(nil, "tend.rpc: connect " .. path .. ": " .. err)
+            vim.schedule(function()
+                cb(nil, "tend.rpc: connect " .. path .. ": " .. err)
+            end)
             return
         end
         local client = Client.new({
+            -- write is loop-safe from any context; no need to schedule it.
             writer = function(data)
                 pipe:write(data)
             end,
@@ -249,23 +261,33 @@ function M.connect(opts, cb)
         })
         pipe:read_start(function(rerr, data)
             if rerr then
-                if opts.on_error then
-                    opts.on_error("tend.rpc: read: " .. rerr)
-                end
-                client:close()
-                if opts.on_disconnect then
-                    opts.on_disconnect()
-                end
+                vim.schedule(function()
+                    if opts.on_error then
+                        opts.on_error("tend.rpc: read: " .. rerr)
+                    end
+                    client:close()
+                    if opts.on_disconnect then
+                        opts.on_disconnect()
+                    end
+                end)
             elseif data then
-                client:feed(data)
+                -- Defer dispatch out of fast-event context: feed() routes into
+                -- handlers and reply callbacks that may use vim.api.
+                vim.schedule(function()
+                    client:feed(data)
+                end)
             else
-                client:close() -- EOF
-                if opts.on_disconnect then
-                    opts.on_disconnect()
-                end
+                vim.schedule(function()
+                    client:close() -- EOF
+                    if opts.on_disconnect then
+                        opts.on_disconnect()
+                    end
+                end)
             end
         end)
-        cb(client, nil)
+        vim.schedule(function()
+            cb(client, nil)
+        end)
     end)
 end
 

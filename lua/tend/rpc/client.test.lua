@@ -261,11 +261,20 @@ describe("tend.rpc.client over a real unix socket", function()
             end)
         end)
 
+        -- Record state instead of asserting inside the async callbacks (an
+        -- assertion that fires there can be swallowed); assert synchronously
+        -- after the wait. Capture vim.in_fast_event() to prove the connect
+        -- callback and the reply callback both run in the main loop, where
+        -- handlers are free to use vim.api.
+        local connect_err = "unset"
+        local connect_fast, reply_fast
         local client, result
         rpc.connect({ path = path }, function(c, err)
-            assert.is_nil(err)
+            connect_err = err
+            connect_fast = vim.in_fast_event()
             client = c
             c:request("echo", { hello = "world" }, function(_, r)
+                reply_fast = vim.in_fast_event()
                 result = r
             end)
         end)
@@ -273,6 +282,9 @@ describe("tend.rpc.client over a real unix socket", function()
         vim.wait(2000, function()
             return result ~= nil
         end, 10)
+        assert.is_nil(connect_err)
+        assert.is_false(connect_fast)
+        assert.is_false(reply_fast)
         assert.same(result, { hello = "world" })
 
         if client then

@@ -61,16 +61,19 @@ end
 --- Declare interest in a logical stream. on_event is called with each event's
 --- envelope, in seq order, with replayed-then-live delivery. If already
 --- connected, the subscription starts immediately; otherwise it starts on the
---- next bootstrap. Re-tracking a stream replaces its listener.
+--- next bootstrap. Re-tracking a stream only swaps its listener — it does not
+--- re-subscribe, since the daemon rejects a duplicate subscription and the live
+--- one keeps delivering.
 --- @param spec tend.rpc.TrackedStream
 function StreamSubscriber:track(spec)
+    local existing = self.streams[spec.stream_id]
     local stream = {
         workspace_id = spec.workspace_id,
         stream_id = spec.stream_id,
         on_event = spec.on_event,
     }
     self.streams[spec.stream_id] = stream
-    if self.client then
+    if self.client and not existing then
         self:subscribe(stream)
     end
 end

@@ -85,6 +85,39 @@ describe("tend.rpc.stream_subscriber subscribe", function()
         assert.equal(c:last_subscribe().params.stream_id, "session:s1")
     end)
 
+    it("re-tracking swaps the listener without re-subscribing", function()
+        local sub = StreamSubscriber.new()
+        local first, second = 0, 0
+        sub:track({
+            workspace_id = "ws",
+            stream_id = "session:s1",
+            on_event = function()
+                first = first + 1
+            end,
+        })
+        local c = fake_client()
+        sub:bootstrap(c, "e1")
+        -- Re-track to swap the listener; the daemon rejects duplicate
+        -- subscribes, so no second events.subscribe must be sent.
+        sub:track({
+            workspace_id = "ws",
+            stream_id = "session:s1",
+            on_event = function()
+                second = second + 1
+            end,
+        })
+        local count = 0
+        for _, req in ipairs(c.sent) do
+            if req.method == sub_mod.METHOD_SUBSCRIBE then
+                count = count + 1
+            end
+        end
+        assert.equal(count, 1)
+        c:push(ev("session:s1", 1))
+        assert.equal(first, 0)
+        assert.equal(second, 1)
+    end)
+
     it("defers subscription until bootstrap when disconnected", function()
         local sub = StreamSubscriber.new()
         sub:track({

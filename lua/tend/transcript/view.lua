@@ -35,9 +35,16 @@ function View:apply(event)
         return
     end
     if not self.initialized then
+        -- A buffer always keeps one line, so until the model renders at least one
+        -- line there is nothing to show: leave the buffer's empty line in place
+        -- (a hidden first event like turn_end must not strand a phantom line).
+        local lines = self.model:lines()
+        if #lines == 0 then
+            return
+        end
         -- Replace the buffer's initial empty line with the full render, so from
         -- here on the buffer's rows line up with the model's line offsets.
-        self:set_lines(0, -1, self.model:lines())
+        self:set_lines(0, -1, lines)
         self.initialized = true
         return
     end

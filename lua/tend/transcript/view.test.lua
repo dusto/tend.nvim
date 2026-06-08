@@ -90,6 +90,32 @@ describe("tend.transcript.view", function()
         )
     end)
 
+    it("strands no phantom line after a hidden first event", function()
+        child.lua([[
+            local View = require("tend.transcript.view")
+            _G.hbuf = vim.api.nvim_create_buf(false, true)
+            -- A renderer where turn_end is hidden (renders no lines).
+            _G.hview = View.new(_G.hbuf, {
+                render = function(e)
+                    if e.type == "turn_end" then return {} end
+                    return { e.seq .. ":" .. (e.payload.text or "") }
+                end,
+            })
+            _G.hview:apply({
+                kind = "event",
+                type = "turn_end",
+                seq = 1,
+                cursor_seq = 1,
+                payload = {},
+            })
+            _G.hview:apply(_G.ev(2, "hello"))
+        ]])
+        assert.same(
+            child.lua_get("vim.api.nvim_buf_get_lines(_G.hbuf, 0, -1, false)"),
+            { "2:hello" }
+        )
+    end)
+
     it("restores a non-modifiable buffer after writing", function()
         child.lua([[
             vim.bo[_G.buf].modifiable = false

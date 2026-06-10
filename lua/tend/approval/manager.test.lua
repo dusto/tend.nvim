@@ -256,6 +256,50 @@ describe("tend.approval.manager", function()
         assert.equal(ManagerMod.METHOD_LIST, sent[#sent].method)
     end)
 
+    it("sync reports the pending count to its callback", function()
+        local manager = new_manager()
+        local client, sent = bootstrapped(manager, {})
+        local got_err, got_count
+        manager:sync(function(err, count)
+            got_err, got_count = err, count
+        end)
+        client:feed(frame({
+            jsonrpc = "2.0",
+            id = sent[#sent].id,
+            result = {
+                approvals = {
+                    {
+                        approval_id = "ap-1",
+                        session_id = "ses-1",
+                        kind = "pane_open",
+                        detail = {
+                            kind = "pane_open",
+                            pane_open = { cwd = "/r" },
+                        },
+                    },
+                },
+            },
+        }))
+        assert.is_nil(got_err)
+        assert.equal(1, got_count)
+    end)
+
+    it("sync reports a list error to its callback", function()
+        local manager = new_manager()
+        local client, sent = bootstrapped(manager, {})
+        local got_err
+        manager:sync(function(err)
+            got_err = err
+        end)
+        client:feed(frame({
+            jsonrpc = "2.0",
+            id = sent[#sent].id,
+            error = { code = -32000, message = "boom" },
+        }))
+        assert.is_not_nil(got_err)
+        assert.is_not_nil(got_err:find("boom", 1, true))
+    end)
+
     it("an approval_requested event for a known id does not sync", function()
         local manager = new_manager()
         local client, sent = bootstrapped(manager, {})

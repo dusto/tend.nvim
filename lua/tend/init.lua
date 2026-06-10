@@ -386,6 +386,10 @@ function Tend.setup(opts)
         desc = "Cleanup Tend processes on tab close",
     })
 
+    -- Daemon-client commands (:TendAttach and friends). Registering them does
+    -- not connect; the connection starts on :TendAttach.
+    require("tend.commands").setup(Config.daemon --[[@as tend.commands.Opts]])
+
     if Config.image_paste.enabled then
         local function get_current_session()
             local tab_page_id = vim.api.nvim_get_current_tabpage()

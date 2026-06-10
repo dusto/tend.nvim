@@ -119,15 +119,24 @@ function Manager:disconnected()
     self.client = nil
 end
 
---- Rebuild the pending set from approval.list and surface the view.
-function Manager:sync()
+--- Rebuild the pending set from approval.list and surface the view. The
+--- optional callback receives (err, pending_count) once the sync settles.
+--- @param cb? fun(err: string|nil, count: integer|nil)
+function Manager:sync(cb)
     local client = self.client
     if not client then
+        if cb then
+            cb("tend.approval: not connected", nil)
+        end
         return
     end
     client:request(M.METHOD_LIST, vim.empty_dict(), function(err, result)
         if err then
-            self.on_error("tend.approval: list failed: " .. err.message)
+            local msg = "tend.approval: list failed: " .. err.message
+            self.on_error(msg)
+            if cb then
+                cb(msg, nil)
+            end
             return
         end
         local approvals = {}
@@ -145,6 +154,9 @@ function Manager:sync()
             self.view:show()
         else
             self.view:refresh()
+        end
+        if cb then
+            cb(nil, self.model:count())
         end
     end)
 end

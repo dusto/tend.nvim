@@ -25,6 +25,13 @@
 ---
 --- @alias tend.UserConfig.Headers table<tend.ui.ChatWidget.PanelNames, tend.ui.ChatWidget.HeaderParts|tend.UserConfig.HeaderRenderFn|nil>
 
+--- Daemon-client (tendd) settings for the :Tend* commands.
+--- @class tend.UserConfig.Daemon
+--- @field socket? string Socket path; defaults to the daemon's well-known path
+--- @field providers string[] ACP provider ids offered by :TendProvider
+--- @field assignee? string Task assignee for :TendClaim; defaults to $USER
+--- @field persona_dirs? string[] Directories :TendPersona scans for *.md personas
+
 --- Data passed to the on_create_session_response hook
 --- @class tend.UserConfig.CreateSessionResponseData
 --- @field session_id? string Convenience field; equals response.sessionId when response is non-nil, nil if creation failed
@@ -298,6 +305,7 @@
 --- @field headers tend.UserConfig.Headers
 --- @field settings tend.UserConfig.Settings
 --- @field provider_switcher tend.UserConfig.ProviderSwitcher
+--- @field daemon tend.UserConfig.Daemon
 local ConfigDefault = {
     debug = false,
 
@@ -580,6 +588,10 @@ local ConfigDefault = {
 
     provider_switcher = {
         hide_unhealthy_providers = false,
+    },
+
+    daemon = {
+        providers = {},
     },
 }
 

@@ -58,6 +58,10 @@ describe("tend.commands", function()
                 start = function(self)
                     self.started = self.started + 1
                 end,
+                stops = 0,
+                stop = function(self)
+                    self.stops = self.stops + 1
+                end,
                 when_connected = function(_, cb)
                     cb()
                 end,
@@ -365,6 +369,28 @@ describe("tend.commands", function()
             return false
         ]])
         assert.is_true(shown)
+    end)
+
+    it("setup stops the previous context's connection", function()
+        child.lua([[
+            require("tend.commands").setup({
+                connection = { stop = function() end },
+            })
+        ]])
+        assert.equal(1, child.lua_get("_G.conn.stops"))
+    end)
+
+    it("re-running plugin setup rebuilds the command context", function()
+        child.lua([[
+            require("tend").setup({ daemon = { providers = { "zed" } } })
+            _G.ui_choice = 1
+            vim.cmd("TendProvider")
+        ]])
+        local provider = child.lua([[
+            local ctx = require("tend.commands").current()
+            return ctx and ctx.provider_id or "no-context"
+        ]])
+        assert.equal("zed", provider)
     end)
 
     it("TendApprove syncs and reports when nothing is pending", function()

@@ -125,8 +125,10 @@ end
 function Manager:sync(cb)
     local client = self.client
     if not client then
+        local msg = "tend.approval: not connected"
+        self.on_error(msg)
         if cb then
-            cb("tend.approval: not connected", nil)
+            cb(msg, nil)
         end
         return
     end

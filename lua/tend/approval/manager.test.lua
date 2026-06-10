@@ -284,6 +284,17 @@ describe("tend.approval.manager", function()
         assert.equal(1, got_count)
     end)
 
+    it("sync without a connection reports through on_error", function()
+        local manager, _, errors = new_manager()
+        local got_err
+        manager:sync(function(err)
+            got_err = err
+        end)
+        assert.equal(1, #errors)
+        assert.is_not_nil(errors[1]:find("not connected", 1, true))
+        assert.is_not_nil(got_err)
+    end)
+
     it("sync reports a list error to its callback", function()
         local manager = new_manager()
         local client, sent = bootstrapped(manager, {})

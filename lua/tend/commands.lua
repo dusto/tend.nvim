@@ -44,8 +44,21 @@ M.Context = Context
 --- @field persona_dirs? string[] Directories scanned for native personas.
 --- @field connection? tend.daemon.Connection Injected connection (tests).
 
+--- The context registered by the last setup() call, or nil before setup. A
+--- connection-scoped singleton by design: the daemon owns sessions and the
+--- editor is one client, so there is exactly one active context.
+--- @type tend.commands.Context|nil
+local current = nil
+
+--- The active command context (nil before setup).
+--- @return tend.commands.Context|nil
+function M.current()
+    return current
+end
+
 --- Build the context and register the :Tend* user commands. Re-running setup
---- replaces the registered commands; the context is rebuilt.
+--- rebuilds the context: the previous context's connection is stopped first,
+--- so its client identity and reconnect timer do not outlive it.
 --- @param opts? tend.commands.Opts
 --- @return tend.commands.Context
 function M.setup(opts)
@@ -63,6 +76,10 @@ function M.setup(opts)
         persona_id = nil,
         session = nil,
     }, Context)
+    if current then
+        current:dispose()
+    end
+    current = self
     self:register_commands()
     return self
 end
@@ -97,6 +114,13 @@ function Context:call(method, params, cb)
             cb(result)
         end
     end)
+end
+
+--- Release the context's connection: stop reconnecting and close the socket.
+--- Called by setup() when replacing the context, so the old connection cannot
+--- keep its client identity registered alongside the new one.
+function Context:dispose()
+    self.conn:stop()
 end
 
 --- Register the :Tend* user commands for this context (called by setup).

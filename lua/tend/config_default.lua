@@ -30,7 +30,8 @@
 --- @field socket? string Socket path; defaults to the daemon's well-known path
 --- @field providers string[] ACP provider ids offered by :TendProvider
 --- @field assignee? string Task assignee for :TendClaim; defaults to $USER
---- @field persona_dirs? string[] Directories :TendPersona scans for *.md personas
+--- @field persona_dirs? string[] User-scoped dirs :TendPersona scans for *.md personas
+--- @field persona_sources? tend.persona.Source[] Harness agent dirs :TendPersona imports from
 
 --- Data passed to the on_create_session_response hook
 --- @class tend.UserConfig.CreateSessionResponseData

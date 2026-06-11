@@ -12,6 +12,7 @@
 --- they need the daemon's diff-review methods (file.diff/editor.diff), which
 --- have not landed.
 local Connection = require("tend.daemon.connection")
+local Discovery = require("tend.persona.discovery")
 local Logger = require("tend.utils.logger")
 local TranscriptView = require("tend.transcript.view")
 
@@ -29,10 +30,12 @@ local M = {}
 --- @field task? table api.Task
 --- @field provider_id? string
 --- @field persona_id? string
+--- @field persona? tend.persona.Persona
 --- @field session? tend.commands.Session
 --- @field private providers string[]
 --- @field private assignee string
 --- @field private persona_dirs string[]
+--- @field private persona_sources? tend.persona.Source[]
 local Context = {}
 Context.__index = Context
 M.Context = Context
@@ -42,6 +45,7 @@ M.Context = Context
 --- @field providers? string[] ACP provider ids offered by :TendProvider.
 --- @field assignee? string Task assignee used by :TendClaim.
 --- @field persona_dirs? string[] Directories scanned for native personas.
+--- @field persona_sources? tend.persona.Source[] Harness agent import sources.
 --- @field connection? tend.daemon.Connection Injected connection (tests).
 
 --- The context registered by the last setup() call, or nil before setup. A
@@ -70,10 +74,12 @@ function M.setup(opts)
         assignee = opts.assignee or vim.env.USER or "tend",
         persona_dirs = opts.persona_dirs
             or { vim.fn.expand("~/.config/tend/personas") },
+        persona_sources = opts.persona_sources,
         workspace = nil,
         task = nil,
         provider_id = nil,
         persona_id = nil,
+        persona = nil,
         session = nil,
     }, Context)
     if current then
@@ -269,22 +275,39 @@ function Context:provider_pick()
     end)
 end
 
---- Pick a persona from the native persona directories. The full picker with
---- harness-agent import is tracked separately; this lists native definitions.
+--- Pick a persona: native definitions (user dirs + workspace .tend/personas)
+--- alongside agents imported read-only from harness dirs in the workspace
+--- (.claude/agents and friends). The selection is held on the context for
+--- prompt composition once sessions carry a persona.
 function Context:persona_pick()
-    local ids = {}
-    for _, dir in ipairs(self.persona_dirs) do
-        for _, path in ipairs(vim.fn.glob(dir .. "/*.md", false, true)) do
-            table.insert(ids, vim.fn.fnamemodify(path, ":t:r"))
-        end
-    end
-    if #ids == 0 then
-        report("tend: no personas found in configured persona dirs")
+    local personas = Discovery.discover({
+        user_dirs = self.persona_dirs,
+        workspace_root = self.workspace and self.workspace.worktree_root or nil,
+        sources = self.persona_sources,
+    })
+    if #personas == 0 then
+        report("tend: no personas found (persona dirs or workspace agents)")
         return
     end
-    vim.ui.select(ids, { prompt = "Persona" }, function(persona_id)
-        if persona_id then
-            self.persona_id = persona_id
+    vim.ui.select(personas, {
+        prompt = "Persona",
+        format_item = function(persona)
+            local label = persona.id
+            if
+                persona.name ~= ""
+                and persona.id:sub(-#persona.name) ~= persona.name
+            then
+                label = label .. " · " .. persona.name
+            end
+            if persona.description then
+                label = label .. " — " .. persona.description
+            end
+            return label
+        end,
+    }, function(persona)
+        if persona then
+            self.persona = persona
+            self.persona_id = persona.id
         end
     end)
 end

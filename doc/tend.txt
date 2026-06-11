@@ -24,6 +24,7 @@ CONTENTS                                              *tend-contents*
   10. Integrations .................. |tend-integrations|
   11. Health Check .................. |tend-health-check|
   12. Debug ......................... |tend-debug|
+  13. Daemon (preview) .............. |tend-daemon|
 
 ==============================================================================
 INTRODUCTION                                      *tend-introduction*
@@ -332,6 +333,21 @@ provider_switcher ~
   `hide_unhealthy_providers`  Hide providers whose command is not installed
                        from the provider switcher UI.
                        Default: `false`.
+
+                                          *tend-config-daemon*
+daemon ~
+  Type: `table`
+
+  Settings for the daemon-client commands. See |tend-daemon|.
+
+  `socket`        Path of the `tendd` Unix socket. Default: the daemon's
+                  well-known path (`$XDG_RUNTIME_DIR/tend/tend.sock`).
+  `providers`     ACP provider ids offered by |:TendProvider|.
+                  Default: `{}`.
+  `assignee`      Task assignee used by |:TendClaim|.
+                  Default: `$USER`.
+  `persona_dirs`  Directories |:TendPersona| scans for `*.md` personas.
+                  Default: `{ "~/.config/tend/personas" }`.
 
                                           *tend-config-hooks*
 hooks ~
@@ -1062,6 +1078,67 @@ View debug output with `:messages` (lost after restart).
 
 Persistent ACP message log:
   `~/.cache/nvim/tend_debug.log`
+
+==============================================================================
+DAEMON (PREVIEW)                                          *tend-daemon*
+
+The plugin is moving to a daemon-client architecture: a `tendd` daemon owns
+ACP providers, task-scoped sessions, the event bus, and approvals; the
+plugin is one client over a Unix socket. These commands drive that flow.
+They are independent of the chat sidebar above and require a running
+`tendd`. Configure them via |tend-config-daemon|.
+
+                                                          *:TendAttach*
+:TendAttach
+  Connect to the daemon (and keep reconnecting) and open the workspace
+  containing the current working directory. Run this first.
+
+                                                          *:TendTaskNew*
+:TendTaskNew
+  Prompt for a title, create a task in the workspace's task provider, and
+  make it the current task.
+
+                                                          *:TendTaskPick*
+:TendTaskPick
+  Pick the current task from the workspace's task list.
+
+                                                          *:TendClaim*
+:TendClaim
+  Claim the current task for `daemon.assignee` and mark it in progress.
+
+                                                          *:TendProvider*
+:TendProvider
+  Pick the ACP provider (from `daemon.providers`) used for new sessions.
+
+                                                          *:TendPersona*
+:TendPersona
+  Pick a persona from `daemon.persona_dirs`. Native `*.md` definitions
+  only for now; the full picker with harness-agent import is planned.
+
+                                                          *:TendDelegate*
+:TendDelegate
+  Start an agent session on the current task (provider from
+  |:TendProvider| or the first configured one) and prompt for the first
+  instruction. The session's events render into a transcript buffer; its
+  approval prompts surface as floats.
+
+                                                          *:TendChat*
+:TendChat
+  Send another prompt turn to the current session.
+
+                                                          *:TendEvents*
+:TendEvents
+  Open the current session's transcript in a vertical split (or focus it
+  when already visible).
+
+                                                          *:TendApprove*
+:TendApprove
+  Re-list pending approvals and open the approval float; reports when
+  nothing is pending. Approvals also surface on their own when the daemon
+  raises them.
+
+Planned, pending daemon support: `:TendOpenChanges` and `:TendDiff`
+(diff review of applied change sets).
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

@@ -95,6 +95,36 @@ describe("tend.persona.discovery", function()
         assert.is_nil(by_id["claude:reviewer"])
     end)
 
+    it("keeps same-stem agents from different import sources", function()
+        write(".claude/agents/reviewer.md", { "claude reviewer" })
+        write(".opencode/agent/reviewer.md", { "opencode reviewer" })
+        write("user/reviewer.md", { "user reviewer" })
+        local personas = Discovery.discover({
+            user_dirs = { root .. "/user" },
+            workspace_root = root,
+        })
+        local by_id = {}
+        for _, p in ipairs(personas) do
+            by_id[p.id] = p.prompt
+        end
+        -- Namespacing exists so harnesses cannot collide; both survive. The
+        -- user persona on the same stem is still shadowed by the imports.
+        assert.equal(2, #personas)
+        assert.equal("claude reviewer", by_id["claude:reviewer"])
+        assert.equal("opencode reviewer", by_id["opencode:reviewer"])
+        assert.is_nil(by_id["reviewer"])
+    end)
+
+    it("dedupes the same stem across user dirs, first dir winning", function()
+        write("user-a/helper.md", { "from a" })
+        write("user-b/helper.md", { "from b" })
+        local personas = Discovery.discover({
+            user_dirs = { root .. "/user-a", root .. "/user-b" },
+        })
+        assert.equal(1, #personas)
+        assert.equal("from a", personas[1].prompt)
+    end)
+
     it("orders tiers workspace, imported, user", function()
         write("user/zeta.md", { "u" })
         write(".claude/agents/alpha.md", { "i" })

@@ -91,41 +91,55 @@ end
 function M.discover(opts)
     opts = opts or {}
 
-    --- @type tend.persona.Persona[][]
+    -- Each scan carries its precedence rank: workspace (1) > imported (2) >
+    -- user (3). Every import source shares rank 2 — sources are peers.
+    --- @type { rank: integer, personas: tend.persona.Persona[] }[]
     local tiers = {}
     if opts.workspace_root then
-        table.insert(
-            tiers,
-            scan_dir(
+        table.insert(tiers, {
+            rank = 1,
+            personas = scan_dir(
                 opts.workspace_root .. "/" .. M.WORKSPACE_DIR,
                 "workspace",
                 false
-            )
-        )
+            ),
+        })
         for _, src in ipairs(opts.sources or M.BUILTIN_SOURCES) do
-            table.insert(
-                tiers,
-                scan_dir(
+            table.insert(tiers, {
+                rank = 2,
+                personas = scan_dir(
                     opts.workspace_root .. "/" .. src.dir,
                     src.source,
                     true
-                )
-            )
+                ),
+            })
         end
     end
     for _, dir in ipairs(opts.user_dirs or {}) do
-        table.insert(tiers, scan_dir(dir, "user", false))
+        table.insert(
+            tiers,
+            { rank = 3, personas = scan_dir(dir, "user", false) }
+        )
     end
 
-    -- Precedence by stem: tiers are already ordered highest first, so the
-    -- first persona seen for a stem wins and later tiers' duplicates drop.
+    -- A stem is claimed by the highest rank that defines it: lower-ranked
+    -- tiers' duplicates drop. Within a rank the namespaced id decides, so
+    -- same-stem agents from different import sources all survive (that is
+    -- what the namespace is for) while the same stem across two user dirs
+    -- (identical id) keeps only the first dir's file.
     local out = {}
-    local seen = {}
+    local claimed = {}
+    local seen_ids = {}
     for _, tier in ipairs(tiers) do
-        for _, persona in ipairs(tier) do
+        for _, persona in ipairs(tier.personas) do
             local stem = vim.fn.fnamemodify(persona.path, ":t:r")
-            if not seen[stem] then
-                seen[stem] = true
+            local holder = claimed[stem]
+            if
+                (holder == nil or holder == tier.rank)
+                and not seen_ids[persona.id]
+            then
+                claimed[stem] = tier.rank
+                seen_ids[persona.id] = true
                 table.insert(out, persona)
             end
         end

@@ -1095,6 +1095,13 @@ plugin is one client over a Unix socket. These commands drive that flow.
 They are independent of the chat sidebar above and require a running
 `tendd`. Configure them via |tend-config-daemon|.
 
+The plugin pins minimum daemon API versions per method set and checks the
+daemon's reported versions during the connect handshake. On a mismatch the
+connection reports an error and stops (no reconnect loop) — upgrade `tendd`
+or the plugin, then run |:TendAttach| again. The pinned minimums, the
+connection state, and the daemon's versions are reported under the
+"Daemon (tendd)" section of `:checkhealth tend`.
+
                                                           *:TendAttach*
 :TendAttach
   Connect to the daemon (and keep reconnecting) and open the workspace

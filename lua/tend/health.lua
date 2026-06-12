@@ -42,6 +42,52 @@ function M.check()
         )
     end
 
+    -- Daemon connection and API version pin
+    vim_health.start("Daemon (tendd)")
+    local DaemonVersions = require("tend.daemon.versions")
+    local required = DaemonVersions.REQUIRED
+    vim_health.info(
+        string.format(
+            "pinned minimums: plugin_to_daemon >= %s, daemon_to_client >= %s",
+            required.plugin_to_daemon,
+            required.daemon_to_client
+        )
+    )
+    local ctx = require("tend.commands").current()
+    if not ctx then
+        vim_health.info(
+            "daemon commands not initialized; run require('tend').setup()"
+        )
+    else
+        local conn_info = ctx.conn:info()
+        if conn_info.version_mismatch then
+            vim_health.error(
+                "daemon API version mismatch: " .. conn_info.version_mismatch,
+                {
+                    "Upgrade tendd (or this plugin) so the contract versions are compatible.",
+                }
+            )
+        elseif conn_info.status == "connected" then
+            local versions = conn_info.versions or {}
+            vim_health.ok(
+                string.format(
+                    "connected — daemon versions: plugin_to_daemon %s, daemon_to_editor %s, daemon_to_client %s (epoch %s)",
+                    versions.plugin_to_daemon,
+                    versions.daemon_to_editor,
+                    versions.daemon_to_client,
+                    conn_info.daemon_epoch
+                )
+            )
+        else
+            vim_health.info(
+                string.format(
+                    "not connected (%s); run :TendAttach — the version check runs on connect",
+                    conn_info.status
+                )
+            )
+        end
+    end
+
     -- Check current provider
     vim_health.start("ACP Provider Configuration")
     local provider_name = Config.provider

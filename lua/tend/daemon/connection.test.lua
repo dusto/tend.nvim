@@ -78,7 +78,11 @@ describe("tend.daemon.connection", function()
             jsonrpc = "2.0",
             id = sent[1].id,
             result = {
-                versions = { api = "v0" },
+                versions = {
+                    plugin_to_daemon = "0.5.0",
+                    daemon_to_editor = "0.1.0",
+                    daemon_to_client = "0.1.0",
+                },
                 daemon_epoch = epoch or "epoch-1",
             },
         }))
@@ -221,6 +225,62 @@ describe("tend.daemon.connection", function()
             assert.equal(2, h.approvals.bootstraps)
         end
     )
+
+    it("hello carries the pinned required versions", function()
+        local Versions = require("tend.daemon.versions")
+        local h = harness()
+        local conn = new_conn(h)
+        conn:start()
+        local _, sent = accept(h)
+        assert.same(Versions.REQUIRED, sent[1].params.required)
+    end)
+
+    it("info reports the daemon versions and epoch when connected", function()
+        local h = harness()
+        local conn = new_conn(h)
+        conn:start()
+        accept(h, "epoch-9")
+        local info = conn:info()
+        assert.equal("connected", info.status)
+        assert.equal("0.5.0", info.versions.plugin_to_daemon)
+        assert.equal("epoch-9", info.daemon_epoch)
+        assert.is_nil(info.version_mismatch)
+    end)
+
+    it("a version mismatch reports, stops, and never reconnects", function()
+        local h = harness()
+        local conn = new_conn(h)
+        conn:start()
+        local pending = h.connects[1]
+        local sent = {}
+        local client = rpc.Client.new({
+            writer = function(data)
+                table.insert(sent, vim.json.decode(vim.trim(data)))
+            end,
+        })
+        pending.cb(client, nil)
+        client:feed(frame({
+            jsonrpc = "2.0",
+            id = sent[1].id,
+            result = {
+                -- Older than the plugin's plugin_to_daemon pin.
+                versions = {
+                    plugin_to_daemon = "0.1.0",
+                    daemon_to_editor = "0.1.0",
+                    daemon_to_client = "0.1.0",
+                },
+                daemon_epoch = "epoch-1",
+            },
+        }))
+        assert.equal(1, #h.errors)
+        assert.is_not_nil(h.errors[1]:find("version mismatch", 1, true))
+        -- No register attempt, no bootstrap, no scheduled retry.
+        assert.equal(1, #sent)
+        assert.equal(0, #h.subscriber.bootstraps)
+        assert.equal("disconnected", conn:status())
+        assert.equal(0, #h.defers)
+        assert.is_not_nil(conn:info().version_mismatch)
+    end)
 
     it("stop closes and suppresses reconnects", function()
         local h = harness()

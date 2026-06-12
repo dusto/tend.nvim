@@ -346,8 +346,14 @@ daemon ~
                   Default: `{}`.
   `assignee`      Task assignee used by |:TendClaim|.
                   Default: `$USER`.
-  `persona_dirs`  Directories |:TendPersona| scans for `*.md` personas.
+  `persona_dirs`  User-scoped directories |:TendPersona| scans for `*.md`
+                  personas.
                   Default: `{ "~/.config/tend/personas" }`.
+  `persona_sources`
+                  Harness agent dirs imported by |:TendPersona|, as a list
+                  of `{ source = <id>, dir = <workspace-relative dir> }`.
+                  Default: claude (`.claude/agents`) and opencode
+                  (`.opencode/agent`).
 
                                           *tend-config-hooks*
 hooks ~
@@ -1112,8 +1118,12 @@ They are independent of the chat sidebar above and require a running
 
                                                           *:TendPersona*
 :TendPersona
-  Pick a persona from `daemon.persona_dirs`. Native `*.md` definitions
-  only for now; the full picker with harness-agent import is planned.
+  Pick a persona. Lists native definitions — `daemon.persona_dirs` plus
+  the workspace's `.tend/personas/` — alongside agents imported read-only
+  from harness dirs in the workspace (`daemon.persona_sources`, e.g.
+  `.claude/agents/`). Imported ids are namespaced by source
+  (`claude:reviewer`); on a name collision, workspace personas shadow
+  imported agents, which shadow user personas.
 
                                                           *:TendDelegate*
 :TendDelegate

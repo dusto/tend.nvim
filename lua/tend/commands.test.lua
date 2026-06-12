@@ -274,11 +274,35 @@ describe("tend.commands", function()
             _G.ui_choice = 1
             vim.cmd("TendPersona")
         ]])
-        local items = child.lua_get("_G.ui_items")
-        table.sort(items)
-        assert.same({ "planner", "reviewer" }, items)
-        assert.is_not_nil(child.lua_get("_G.ctx.persona_id"))
+        local ids = child.lua([[
+            return vim.tbl_map(function(p)
+                return p.id
+            end, _G.ui_items)
+        ]])
+        assert.same({ "planner", "reviewer" }, ids)
+        assert.equal("planner", child.lua_get("_G.ctx.persona_id"))
+        assert.equal("planner prompt", child.lua_get("_G.ctx.persona.prompt"))
         child.lua([[vim.fn.delete("/tmp/tend-test-personas", "rf")]])
+    end)
+
+    it("TendPersona imports harness agents from the workspace", function()
+        child.lua([[
+            local ws = vim.fn.tempname()
+            vim.fn.mkdir(ws .. "/.claude/agents", "p")
+            vim.fn.writefile({
+                "---",
+                "name: reviewer",
+                "description: PR review agent",
+                "---",
+                "Review the diff.",
+            }, ws .. "/.claude/agents/reviewer.md")
+            _G.ctx.workspace = { workspace_id = "ws-1", worktree_root = ws }
+            _G.ui_choice = 1
+            vim.cmd("TendPersona")
+            vim.fn.delete(ws, "rf")
+        ]])
+        assert.equal("claude:reviewer", child.lua_get("_G.ctx.persona_id"))
+        assert.equal("Review the diff.", child.lua_get("_G.ctx.persona.prompt"))
     end)
 
     it("TendDelegate starts a session and sends the first prompt", function()

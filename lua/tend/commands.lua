@@ -72,8 +72,7 @@ function M.setup(opts)
             or Connection.Connection.new({ socket_path = opts.socket }),
         providers = opts.providers or {},
         assignee = opts.assignee or vim.env.USER or "tend",
-        persona_dirs = opts.persona_dirs
-            or { vim.fn.expand("~/.config/tend/personas") },
+        persona_dirs = opts.persona_dirs or Discovery.default_user_dirs(),
         persona_sources = opts.persona_sources,
         workspace = nil,
         task = nil,

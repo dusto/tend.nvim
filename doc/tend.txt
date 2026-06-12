@@ -348,7 +348,8 @@ daemon ~
                   Default: `$USER`.
   `persona_dirs`  User-scoped directories |:TendPersona| scans for `*.md`
                   personas.
-                  Default: `{ "~/.config/tend/personas" }`.
+                  Default: `$XDG_CONFIG_HOME/tend/personas`, falling back
+                  to `~/.config/tend/personas`.
   `persona_sources`
                   Harness agent dirs imported by |:TendPersona|, as a list
                   of `{ source = <id>, dir = <workspace-relative dir> }`.

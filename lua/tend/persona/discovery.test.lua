@@ -152,6 +152,22 @@ describe("tend.persona.discovery", function()
         assert.equal("x", personas[1].source)
     end)
 
+    it("default user dirs honor XDG_CONFIG_HOME", function()
+        local saved = vim.env.XDG_CONFIG_HOME
+        vim.env.XDG_CONFIG_HOME = "/xdg/conf"
+        local dirs = Discovery.default_user_dirs()
+        vim.env.XDG_CONFIG_HOME = saved
+        assert.same({ "/xdg/conf/tend/personas" }, dirs)
+    end)
+
+    it("default user dirs fall back to ~/.config", function()
+        local saved = vim.env.XDG_CONFIG_HOME
+        vim.env.XDG_CONFIG_HOME = nil
+        local dirs = Discovery.default_user_dirs()
+        vim.env.XDG_CONFIG_HOME = saved
+        assert.same({ vim.fn.expand("~/.config") .. "/tend/personas" }, dirs)
+    end)
+
     it("returns empty for missing dirs and no workspace", function()
         local personas = Discovery.discover({
             user_dirs = { root .. "/nope" },

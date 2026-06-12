@@ -41,6 +41,17 @@ M.BUILTIN_SOURCES = {
 --- @field workspace_root? string worktree root; nil scans user dirs only
 --- @field sources? tend.persona.Source[] import sources (default: built-ins)
 
+--- The default user-scoped persona dirs: `$XDG_CONFIG_HOME/tend/personas`,
+--- falling back to `~/.config/tend/personas` when XDG_CONFIG_HOME is unset.
+--- @return string[]
+function M.default_user_dirs()
+    local config_home = vim.env.XDG_CONFIG_HOME
+    if not config_home or config_home == "" then
+        config_home = vim.fn.expand("~/.config")
+    end
+    return { config_home .. "/tend/personas" }
+end
+
 --- @param path string
 --- @return string|nil text
 local function read_file(path)

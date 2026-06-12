@@ -71,8 +71,9 @@ function M.check()
             local versions = conn_info.versions or {}
             vim_health.ok(
                 string.format(
-                    "connected — daemon versions: plugin_to_daemon %s, daemon_to_client %s (epoch %s)",
+                    "connected — daemon versions: plugin_to_daemon %s, daemon_to_editor %s, daemon_to_client %s (epoch %s)",
                     versions.plugin_to_daemon,
+                    versions.daemon_to_editor,
                     versions.daemon_to_client,
                     conn_info.daemon_epoch
                 )

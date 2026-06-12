@@ -115,13 +115,13 @@ describe("Health", function()
         assert.is_true(found)
     end)
 
-    it("reports a connected daemon with its versions", function()
+    it("reports a connected daemon with all three version sets", function()
         with_connection({
             status = "connected",
             client_id = "nvim-1",
             versions = {
                 plugin_to_daemon = "0.5.0",
-                daemon_to_editor = "0.1.0",
+                daemon_to_editor = "0.2.1",
                 daemon_to_client = "0.1.0",
             },
             daemon_epoch = "epoch-1",
@@ -130,7 +130,14 @@ describe("Health", function()
         local found = false
         for _, call in ipairs(ok_stub.calls) do
             local msg = tostring(call[1])
-            if msg:find("0.5.0", 1, true) and msg:find("epoch-1", 1, true) then
+            -- The unpinned daemon_to_editor set is still part of the daemon's
+            -- reported snapshot and must show alongside the pinned sets.
+            if
+                msg:find("plugin_to_daemon 0.5.0", 1, true)
+                and msg:find("daemon_to_editor 0.2.1", 1, true)
+                and msg:find("daemon_to_client 0.1.0", 1, true)
+                and msg:find("epoch-1", 1, true)
+            then
                 found = true
             end
         end

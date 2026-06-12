@@ -13,6 +13,7 @@
 local Logger = require("tend.utils.logger")
 local ApprovalManager = require("tend.approval.manager")
 local StreamSubscriber = require("tend.rpc.stream_subscriber")
+local Versions = require("tend.daemon.versions")
 local rpc = require("tend.rpc.client")
 
 local M = {}
@@ -43,6 +44,8 @@ M.ERR_NOT_CONNECTED = -32001
 --- @field private stopped boolean
 --- @field private retry_pending boolean
 --- @field private waiters function[] callbacks queued for the next connect
+--- @field private hello? { versions: table<string, string>, daemon_epoch: string }
+--- @field private version_mismatch? string why the last handshake failed the pin
 local Connection = {}
 Connection.__index = Connection
 M.Connection = Connection
@@ -114,6 +117,29 @@ function Connection:status()
     return self.state
 end
 
+--- @class tend.daemon.ConnectionInfo
+--- @field status tend.daemon.Status
+--- @field client_id string
+--- @field versions? table<string, string> daemon versions from the last hello
+--- @field daemon_epoch? string
+--- @field version_mismatch? string why the last handshake failed the pin
+
+--- A health-reporting snapshot of the connection.
+--- @return tend.daemon.ConnectionInfo
+function Connection:info()
+    --- @type tend.daemon.ConnectionInfo
+    local info = {
+        status = self.state,
+        client_id = self.client_id,
+        version_mismatch = self.version_mismatch,
+    }
+    if self.hello then
+        info.versions = self.hello.versions
+        info.daemon_epoch = self.hello.daemon_epoch
+    end
+    return info
+end
+
 --- Issue a request on the live connection. While disconnected the callback
 --- receives a synthetic ERR_NOT_CONNECTED error instead.
 --- @param method string
@@ -172,14 +198,32 @@ end
 
 --- @private
 --- Play hello + register on a fresh transport, then bootstrap the subscriber
---- (with the daemon epoch) and the approval manager.
+--- (with the daemon epoch) and the approval manager. The hello reply is
+--- checked against the plugin's version pin before anything else happens; a
+--- mismatch is terminal — retrying cannot heal it, so no reconnect is
+--- scheduled (a later :TendAttach may try again after a daemon upgrade).
 --- @param client tend.rpc.Client
 function Connection:handshake(client)
-    client:request(M.METHOD_HELLO, vim.empty_dict(), function(err, hello)
+    client:request(M.METHOD_HELLO, {
+        required = Versions.REQUIRED,
+    }, function(err, hello)
         if err then
             self:handshake_failed(client, "hello", err)
             return
         end
+        local ok, why = Versions.satisfies(hello.versions, Versions.REQUIRED)
+        if not ok then
+            self.version_mismatch = why
+            self.on_error("tend: daemon API version mismatch: " .. why)
+            client:close()
+            self:set_state("disconnected")
+            return
+        end
+        self.version_mismatch = nil
+        self.hello = {
+            versions = hello.versions,
+            daemon_epoch = hello.daemon_epoch,
+        }
         client:request(M.METHOD_REGISTER, {
             client_id = self.client_id,
             role = self.role,

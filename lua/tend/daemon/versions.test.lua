@@ -11,9 +11,29 @@ describe("tend.daemon.versions", function()
         }
     end
 
-    it("pins plugin_to_daemon and daemon_to_client minimums", function()
-        assert.is_not_nil(Versions.REQUIRED.plugin_to_daemon)
-        assert.is_not_nil(Versions.REQUIRED.daemon_to_client)
+    it(
+        "pins plugin_to_daemon, daemon_to_editor, and daemon_to_client",
+        function()
+            assert.is_not_nil(Versions.REQUIRED.plugin_to_daemon)
+            assert.is_not_nil(Versions.REQUIRED.daemon_to_editor)
+            assert.is_not_nil(Versions.REQUIRED.daemon_to_client)
+        end
+    )
+
+    it("requires the daemon version that introduced file.diff", function()
+        -- The plugin calls file.diff (plugin_to_daemon 0.6.0) for the review
+        -- commands; an older daemon must be rejected at the handshake, not fail
+        -- later when :TendDiff first runs.
+        assert.is_false(Versions.satisfies({
+            plugin_to_daemon = "0.5.0",
+            daemon_to_editor = "0.2.0",
+            daemon_to_client = "0.1.0",
+        }))
+        assert.is_true(Versions.satisfies({
+            plugin_to_daemon = "0.6.0",
+            daemon_to_editor = "0.2.0",
+            daemon_to_client = "0.1.0",
+        }))
     end)
 
     it("accepts versions equal to the pin", function()

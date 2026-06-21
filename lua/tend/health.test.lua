@@ -115,6 +115,23 @@ describe("Health", function()
         assert.is_true(found)
     end)
 
+    it("reports all three pinned minimums for version debugging", function()
+        Health.check()
+        local found = false
+        for _, call in ipairs(info_stub.calls) do
+            local msg = tostring(call[1])
+            if
+                msg:find("pinned minimums", 1, true)
+                and msg:find("plugin_to_daemon", 1, true)
+                and msg:find("daemon_to_editor", 1, true)
+                and msg:find("daemon_to_client", 1, true)
+            then
+                found = true
+            end
+        end
+        assert.is_true(found)
+    end)
+
     it("reports a connected daemon with all three version sets", function()
         with_connection({
             status = "connected",

@@ -48,8 +48,9 @@ function M.check()
     local required = DaemonVersions.REQUIRED
     vim_health.info(
         string.format(
-            "pinned minimums: plugin_to_daemon >= %s, daemon_to_client >= %s",
+            "pinned minimums: plugin_to_daemon >= %s, daemon_to_editor >= %s, daemon_to_client >= %s",
             required.plugin_to_daemon,
+            required.daemon_to_editor,
             required.daemon_to_client
         )
     )

@@ -12,7 +12,13 @@ local M = {}
 --- The minimum contract versions this plugin requires per method set.
 --- plugin_to_daemon 0.2.0 is the first version with task.*.
 M.REQUIRED = {
-    plugin_to_daemon = "0.2.0",
+    -- 0.6.0 introduced file.diff, which :TendDiff / :TendOpenChanges call. Pin
+    -- it so an older daemon is rejected at the handshake, not mid-session when
+    -- a review command first runs.
+    plugin_to_daemon = "0.6.0",
+    -- The plugin serves editor.open / editor.diff (daemon->editor 0.2.0); pin it
+    -- so we never try to render a diff payload a too-old daemon cannot send.
+    daemon_to_editor = "0.2.0",
     daemon_to_client = "0.1.0",
 }
 

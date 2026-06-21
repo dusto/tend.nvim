@@ -12,6 +12,7 @@
 --- unit-testable without a socket or timers.
 local Logger = require("tend.utils.logger")
 local ApprovalManager = require("tend.approval.manager")
+local EditorService = require("tend.daemon.editor_service")
 local StreamSubscriber = require("tend.rpc.stream_subscriber")
 local Versions = require("tend.daemon.versions")
 local rpc = require("tend.rpc.client")
@@ -30,6 +31,7 @@ M.ERR_NOT_CONNECTED = -32001
 --- @class tend.daemon.Connection
 --- @field subscriber tend.rpc.StreamSubscriber
 --- @field approvals tend.approval.Manager
+--- @field editor tend.daemon.EditorService
 --- @field private client_id string
 --- @field private role string
 --- @field private prompt_capable boolean
@@ -62,6 +64,7 @@ M.Connection = Connection
 --- @field on_status? fun(status: tend.daemon.Status)
 --- @field subscriber? tend.rpc.StreamSubscriber
 --- @field approvals? tend.approval.Manager
+--- @field editor? tend.daemon.EditorService Serves editor.* reverse requests.
 
 --- @param opts? tend.daemon.ConnectionOpts
 --- @return tend.daemon.Connection
@@ -85,6 +88,7 @@ function Connection.new(opts)
         on_status = opts.on_status or function() end,
         subscriber = opts.subscriber or StreamSubscriber.StreamSubscriber.new(),
         approvals = opts.approvals or ApprovalManager.Manager.new(),
+        editor = opts.editor or EditorService.EditorService.new(),
         client = nil,
         state = "disconnected",
         stopped = false,
@@ -236,6 +240,7 @@ function Connection:handshake(client)
             self.client = client
             self.subscriber:bootstrap(client, hello.daemon_epoch)
             self.approvals:bootstrap(client)
+            self.editor:bootstrap(client)
             self:set_state("connected")
             local waiters = self.waiters
             self.waiters = {}

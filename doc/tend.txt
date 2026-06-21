@@ -1155,8 +1155,23 @@ connection state, and the daemon's versions are reported under the
   nothing is pending. Approvals also surface on their own when the daemon
   raises them.
 
-Planned, pending daemon support: `:TendOpenChanges` and `:TendDiff`
-(diff review of applied change sets).
+                                                      *:TendOpenChanges*
+:TendOpenChanges [{change_set_id}]
+  Open a change set's files in buffers for in-place review. With no
+  argument you are prompted for the id. Read-only — opens nothing else
+  and changes nothing.
+
+                                                          *:TendDiff*
+:TendDiff [{change_set_id}]
+  Review a change set's captured before/after snapshots in a native diff
+  view, one tab per file. The daemon serves the snapshots (a denied or
+  still-pending proposal is reviewable exactly as proposed), so this
+  shows what the set changed, not the live file. With no argument you are
+  prompted for the id. Read-only.
+
+The daemon may also drive these directly: when it has a change set to
+show it calls `editor.open` / `editor.diff` on the bound editor, which
+the plugin renders the same way.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

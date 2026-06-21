@@ -145,6 +145,8 @@ describe("tend.commands", function()
             "TendChat",
             "TendEvents",
             "TendApprove",
+            "TendOpenChanges",
+            "TendDiff",
         }) do
             assert.is_true(names[name] == true)
         end
@@ -415,6 +417,80 @@ describe("tend.commands", function()
             return ctx and ctx.provider_id or "no-context"
         ]])
         assert.equal("zed", provider)
+    end)
+
+    it("TendOpenChanges fetches file.diff and opens the set's files", function()
+        child.lua([[
+            local DR = require("tend.ui.diff_review")
+            _G.opened = nil
+            DR.open_files = function(uris)
+                _G.opened = uris
+                return {}
+            end
+            _G.replies["file.diff"] = {
+                result = {
+                    change_set_id = "cs-1",
+                    files = {
+                        { uri = "file:///repo/a.go", before = "x", after = "y" },
+                        { uri = "file:///repo/b.go", before = "p", after = "q" },
+                    },
+                },
+            }
+            vim.cmd("TendOpenChanges cs-1")
+        ]])
+        local sent = calls()
+        assert.equal("file.diff", sent[1].method)
+        assert.same({ change_set_id = "cs-1" }, sent[1].params)
+        assert.same(
+            { "file:///repo/a.go", "file:///repo/b.go" },
+            child.lua_get("_G.opened")
+        )
+    end)
+
+    it("TendDiff fetches file.diff and shows the snapshots", function()
+        child.lua([[
+            local DR = require("tend.ui.diff_review")
+            _G.diffed = nil
+            DR.show_snapshots = function(csid, files)
+                _G.diffed = { csid = csid, n = #files }
+                return {}
+            end
+            _G.replies["file.diff"] = {
+                result = {
+                    change_set_id = "cs-2",
+                    files = {
+                        { uri = "file:///repo/a.go", before = "x", after = "y" },
+                    },
+                },
+            }
+            vim.cmd("TendDiff cs-2")
+        ]])
+        local sent = calls()
+        assert.equal("file.diff", sent[1].method)
+        assert.same({ change_set_id = "cs-2" }, sent[1].params)
+        assert.equal("cs-2", child.lua_get("_G.diffed.csid"))
+        assert.equal(1, child.lua_get("_G.diffed.n"))
+    end)
+
+    it("TendDiff prompts for a change set id when none is given", function()
+        child.lua([[
+            local DR = require("tend.ui.diff_review")
+            _G.diffed = nil
+            DR.show_snapshots = function(csid, _)
+                _G.diffed = { csid = csid }
+                return {}
+            end
+            _G.ui_input = "cs-prompted"
+            _G.replies["file.diff"] = {
+                result = {
+                    change_set_id = "cs-prompted",
+                    files = { { uri = "file:///a", before = "", after = "z" } },
+                },
+            }
+            vim.cmd("TendDiff")
+        ]])
+        assert.equal("file.diff", calls()[1].method)
+        assert.equal("cs-prompted", child.lua_get("_G.diffed.csid"))
     end)
 
     it("TendApprove syncs and reports when nothing is pending", function()

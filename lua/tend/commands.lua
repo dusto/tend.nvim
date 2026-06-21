@@ -8,10 +8,10 @@
 ---
 --- Wired here, sessions fan their event stream out to both the transcript view
 --- and the approval manager, so a delegated agent's output and its approval
---- prompts stay in sync. :TendOpenChanges/:TendDiff are not registered yet:
---- they need the daemon's diff-review methods (file.diff/editor.diff), which
---- have not landed.
+--- prompts stay in sync. :TendOpenChanges/:TendDiff drive the daemon's
+--- diff-review surface (file.diff) and the local diff renderer.
 local Connection = require("tend.daemon.connection")
+local DiffReview = require("tend.ui.diff_review")
 local Discovery = require("tend.persona.discovery")
 local Logger = require("tend.utils.logger")
 local TranscriptView = require("tend.transcript.view")
@@ -149,12 +149,19 @@ function Context:register_commands()
         { "TendChat", "chat", "Send a prompt to the current session" },
         { "TendEvents", "events", "Open the session transcript" },
         { "TendApprove", "approve", "Review pending approvals" },
+        {
+            "TendOpenChanges",
+            "open_changes",
+            "Open a change set's files for review",
+            "?",
+        },
+        { "TendDiff", "diff", "Review a change set's before/after diff", "?" },
     }
     for _, def in ipairs(defs) do
-        local name, method, desc = def[1], def[2], def[3]
-        vim.api.nvim_create_user_command(name, function()
-            self[method](self)
-        end, { desc = desc })
+        local name, method, desc, nargs = def[1], def[2], def[3], def[4]
+        vim.api.nvim_create_user_command(name, function(cmd)
+            self[method](self, cmd.args ~= "" and cmd.args or nil)
+        end, { desc = desc, nargs = nargs or 0 })
     end
 end
 
@@ -409,6 +416,60 @@ function Context:events()
         split = "right",
         win = 0,
     })
+end
+
+--- @private
+--- Resolve a change set id for a review command: an explicit argument, else a
+--- prompt. (Auto-resolving "the last set" is deferred — the id lives in the
+--- file_edit approval detail, not on the event stream.) Calls cb with the id
+--- when one is available.
+--- @param arg string|nil
+--- @param cb fun(change_set_id: string)
+function Context:resolve_change_set(arg, cb)
+    if arg and arg ~= "" then
+        cb(arg)
+        return
+    end
+    vim.ui.input({ prompt = "Change set id: " }, function(input)
+        if input and input ~= "" then
+            cb(input)
+        end
+    end)
+end
+
+--- Open a change set's files in buffers for in-place review. Read-only: it
+--- fetches the set from file.diff (not task-gated) and opens the named files.
+--- @param arg string|nil change set id
+function Context:open_changes(arg)
+    self:resolve_change_set(arg, function(csid)
+        self:call("file.diff", { change_set_id = csid }, function(result)
+            local uris = {}
+            for _, f in ipairs(result.files or {}) do
+                table.insert(uris, f.uri)
+            end
+            if #uris == 0 then
+                report("tend: change set " .. csid .. " has no files")
+                return
+            end
+            DiffReview.open_files(uris)
+        end)
+    end)
+end
+
+--- Review a change set's before/after snapshots in a diff view. Read-only: the
+--- snapshots come from file.diff and render locally.
+--- @param arg string|nil change set id
+function Context:diff(arg)
+    self:resolve_change_set(arg, function(csid)
+        self:call("file.diff", { change_set_id = csid }, function(result)
+            local files = result.files or {}
+            if #files == 0 then
+                report("tend: change set " .. csid .. " has no files")
+                return
+            end
+            DiffReview.show_snapshots(csid, files)
+        end)
+    end)
 end
 
 --- Sync and surface pending approvals.

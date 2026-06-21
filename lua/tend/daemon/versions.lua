@@ -13,6 +13,9 @@ local M = {}
 --- plugin_to_daemon 0.2.0 is the first version with task.*.
 M.REQUIRED = {
     plugin_to_daemon = "0.2.0",
+    -- The plugin serves editor.open / editor.diff (daemon->editor 0.2.0); pin it
+    -- so we never try to render a diff payload a too-old daemon cannot send.
+    daemon_to_editor = "0.2.0",
     daemon_to_client = "0.1.0",
 }
 

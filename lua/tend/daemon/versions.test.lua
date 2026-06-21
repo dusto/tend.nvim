@@ -6,7 +6,7 @@ describe("tend.daemon.versions", function()
     local function have(p2d)
         return {
             plugin_to_daemon = p2d,
-            daemon_to_editor = "0.1.0",
+            daemon_to_editor = "0.2.0",
             daemon_to_client = "0.1.0",
         }
     end

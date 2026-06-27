@@ -142,6 +142,7 @@ describe("tend.commands", function()
             "TendProvider",
             "TendPersona",
             "TendDelegate",
+            "TendSessions",
             "TendChat",
             "TendEvents",
             "TendApprove",
@@ -318,7 +319,10 @@ describe("tend.commands", function()
         }, sent[1].params)
         assert.equal("agent.prompt", sent[2].method)
         assert.same({ session_id = "ses-1", text = "go" }, sent[2].params)
-        assert.equal("ses-1", child.lua_get("_G.ctx.session.session_id"))
+        assert.equal(
+            "ses-1",
+            child.lua_get("_G.ctx:active_session().session_id")
+        )
         assert.equal(
             "str-1",
             child.lua_get("_G.conn.subscriber.tracked[1].stream_id")
@@ -350,7 +354,7 @@ describe("tend.commands", function()
             })
         ]])
         local lines = child.lua_get(
-            "vim.api.nvim_buf_get_lines(_G.ctx.session.bufnr, 0, -1, false)"
+            "vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false)"
         )
         assert.same({ "hello there" }, lines)
         assert.equal(
@@ -386,7 +390,7 @@ describe("tend.commands", function()
             vim.cmd("TendEvents")
         ]])
         local shown = child.lua([[
-            local bufnr = _G.ctx.session.bufnr
+            local bufnr = _G.ctx:active_session().bufnr
             for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
                 if vim.api.nvim_win_get_buf(win) == bufnr then
                     return true
@@ -395,6 +399,114 @@ describe("tend.commands", function()
             return false
         ]])
         assert.is_true(shown)
+    end)
+
+    it("TendSessions lists sessions and focuses the chosen one", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-A",
+                            provider_id = "codex",
+                            stream_id = "str-A",
+                            status = "running",
+                            task = { workspace_id = "ws-1", id = "t-1" },
+                        },
+                        {
+                            session_id = "ses-B",
+                            provider_id = "codex",
+                            stream_id = "str-B",
+                            status = "idle",
+                            task = { workspace_id = "ws-1", id = "t-2" },
+                        },
+                    },
+                },
+            }
+            _G.ui_choice = 2 -- pick ses-B
+            vim.cmd("TendSessions")
+        ]])
+        local sent = calls()
+        assert.equal("session.list", sent[1].method)
+        assert.same({ workspace_id = "ws-1" }, sent[1].params)
+        -- The chosen session is focused and its stream tracked.
+        assert.equal("ses-B", child.lua_get("_G.ctx.active"))
+        assert.equal(
+            "str-B",
+            child.lua_get("_G.conn.subscriber.tracked[1].stream_id")
+        )
+    end)
+
+    it("TendSessions reports when there are no sessions", function()
+        child.lua([[
+            _G.replies["session.list"] = { result = { sessions = {} } }
+            vim.cmd("TendSessions")
+        ]])
+        assert.is_not_nil(last_notice().msg:find("no active sessions", 1, true))
+    end)
+
+    it("tracks multiple sessions; chat targets the focused one", function()
+        child.lua([[
+            -- First delegate -> ses-1 tracked and focused.
+            _G.give_session()
+            -- A second session started independently, then focused via select.
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-2",
+                            provider_id = "codex",
+                            stream_id = "str-2",
+                            status = "idle",
+                            task = { workspace_id = "ws-1", id = "t-2" },
+                        },
+                    },
+                },
+            }
+            _G.ui_choice = 1
+            vim.cmd("TendSessions")
+        ]])
+        -- Both sessions are tracked locally; ses-2 is now focused.
+        assert.is_true(child.lua_get("_G.ctx.sessions['ses-1'] ~= nil"))
+        assert.is_true(child.lua_get("_G.ctx.sessions['ses-2'] ~= nil"))
+        assert.equal("ses-2", child.lua_get("_G.ctx.active"))
+
+        child.lua([[
+            _G.calls = {}
+            _G.ui_input = "to two"
+            vim.cmd("TendChat")
+        ]])
+        local sent = calls()
+        assert.equal("agent.prompt", sent[1].method)
+        assert.same({ session_id = "ses-2", text = "to two" }, sent[1].params)
+    end)
+
+    it("re-selecting a tracked session reuses its transcript", function()
+        child.lua([[
+            _G.give_session() -- ses-1 tracked
+            _G.tracked_before = #_G.conn.subscriber.tracked
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-1",
+                            provider_id = "codex",
+                            stream_id = "str-1",
+                            status = "idle",
+                            task = { workspace_id = "ws-1", id = "t-1" },
+                        },
+                    },
+                },
+            }
+            _G.ui_choice = 1
+            vim.cmd("TendSessions")
+        ]])
+        -- Selecting an already-tracked session does not re-subscribe.
+        assert.equal(
+            child.lua_get("_G.tracked_before"),
+            child.lua_get("#_G.conn.subscriber.tracked")
+        )
     end)
 
     it("setup stops the previous context's connection", function()

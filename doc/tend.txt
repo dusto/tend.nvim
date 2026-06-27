@@ -25,6 +25,7 @@ CONTENTS                                              *tend-contents*
   11. Health Check .................. |tend-health-check|
   12. Debug ......................... |tend-debug|
   13. Daemon (preview) .............. |tend-daemon|
+      Quickstart .................... |tend-daemon-quickstart|
 
 ==============================================================================
 INTRODUCTION                                      *tend-introduction*
@@ -1101,6 +1102,32 @@ connection reports an error and stops (no reconnect loop) — upgrade `tendd`
 or the plugin, then run |:TendAttach| again. The pinned minimums, the
 connection state, and the daemon's versions are reported under the
 "Daemon (tendd)" section of `:checkhealth tend`.
+
+                                                  *tend-daemon-quickstart*
+Quickstart ~
+
+  1. Install an ACP provider (the default Claude one is simplest): >sh
+     npm i -g @agentclientprotocol/claude-agent-acp
+<     `claude-agent-acp` is a built-in daemon default, so no daemon config
+     file is needed to use it.
+
+  2. Start the daemon (from the `tend` repo): >sh
+     go run ./cmd/tendd
+<     Leave it running; it listens on `$XDG_RUNTIME_DIR/tend/tend.sock`.
+
+  3. Point the plugin at the provider and connect: >lua
+     require("tend").setup({ daemon = { providers = { "claude" } } })
+<     Then, from inside the target git repo: >vim
+     :TendAttach
+     :TendTaskNew
+     :TendDelegate
+<
+  The `daemon.providers` ids must match the daemon's provider ids (see
+  |tend-config-daemon|). If `:TendDelegate` fails to start the agent,
+  confirm the provider binary is on the PATH the *daemon* sees.
+
+  Note: the daemon's task provider is currently an in-memory stand-in, so
+  tasks do not persist across daemon restarts.
 
                                                           *:TendAttach*
 :TendAttach

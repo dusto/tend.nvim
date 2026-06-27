@@ -205,7 +205,7 @@ end
 --- (with the daemon epoch) and the approval manager. The hello reply is
 --- checked against the plugin's version pin before anything else happens; a
 --- mismatch is terminal — retrying cannot heal it, so no reconnect is
---- scheduled (a later :TendAttach may try again after a daemon upgrade).
+--- scheduled (a later :TendConnect may try again after a daemon upgrade).
 --- @param client tend.rpc.Client
 function Connection:handshake(client)
     client:request(M.METHOD_HELLO, {

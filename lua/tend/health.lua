@@ -82,7 +82,7 @@ function M.check()
         else
             vim_health.info(
                 string.format(
-                    "not connected (%s); run :TendAttach — the version check runs on connect",
+                    "not connected (%s); run :TendConnect — the version check runs on connect",
                     conn_info.status
                 )
             )

@@ -346,10 +346,10 @@ function Tend.setup(opts)
         )
     end
 
-    -- Daemon-client commands (:TendAttach and friends). Runs on every setup —
+    -- Daemon-client commands (:TendConnect and friends). Runs on every setup —
     -- not just the first — so daemon config changes rebuild the command
     -- context (the previous context's connection is stopped). Registering
-    -- does not connect; the connection starts on :TendAttach.
+    -- does not connect; the connection starts on :TendConnect.
     require("tend.commands").setup(Config.daemon --[[@as tend.commands.Opts]])
 
     if traps_set then

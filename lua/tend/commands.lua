@@ -150,6 +150,11 @@ function Context:register_commands()
             "Start an agent session on the current task",
         },
         {
+            "TendDelegateTo",
+            "delegate_to",
+            "Route a picked task to an existing session",
+        },
+        {
             "TendSessions",
             "sessions_pick",
             "List active sessions and focus one",
@@ -221,8 +226,31 @@ function Context:task_new()
     end)
 end
 
---- Pick the current task from the workspace's task list.
-function Context:task_pick()
+--- @private
+--- @param task table api.Task
+--- @return string
+local function task_label(task)
+    return task.ref.id .. " · " .. task.title .. " [" .. task.status .. "]"
+end
+
+--- @private
+--- Compose the prompt that hands a task to a session: the task id, title, and
+--- description, as a turn the running agent acts on.
+--- @param task table api.Task
+--- @return string
+local function task_prompt(task)
+    local prompt = "Please work on task " .. task.ref.id .. ": " .. task.title
+    if task.description and task.description ~= "" then
+        prompt = prompt .. "\n\n" .. task.description
+    end
+    return prompt
+end
+
+--- @private
+--- Fetch the workspace's tasks and pass them to cb; reports and skips cb when
+--- there are none. Requires a workspace.
+--- @param cb fun(tasks: table[])
+function Context:with_tasks(cb)
     local ws = self:need_workspace()
     if not ws then
         return
@@ -233,16 +261,16 @@ function Context:task_pick()
             report("tend: no tasks in this workspace")
             return
         end
+        cb(tasks)
+    end)
+end
+
+--- Pick the current task from the workspace's task list.
+function Context:task_pick()
+    self:with_tasks(function(tasks)
         vim.ui.select(tasks, {
             prompt = "Task",
-            format_item = function(task)
-                return task.ref.id
-                    .. " · "
-                    .. task.title
-                    .. " ["
-                    .. task.status
-                    .. "]"
-            end,
+            format_item = task_label,
         }, function(task)
             if task then
                 self.task = task
@@ -443,9 +471,11 @@ local function session_label(s)
     return label
 end
 
---- List the daemon's sessions, then focus the chosen one — tracking its stream
---- (transcript) if not already followed — so :TendChat / :TendEvents target it.
-function Context:sessions_pick()
+--- @private
+--- Fetch the daemon's sessions (scoped to the current workspace when one is
+--- open) and pass them to cb; reports and skips cb when there are none.
+--- @param cb fun(sessions: table[])
+function Context:with_sessions(cb)
     local ws = self.workspace
     local params = ws and { workspace_id = ws.workspace_id } or {}
     self:call("session.list", params, function(result)
@@ -454,6 +484,28 @@ function Context:sessions_pick()
             report("tend: no active sessions; run :TendDelegate to start one")
             return
         end
+        cb(list)
+    end)
+end
+
+--- @private
+--- Track a session (idempotent) and make it the focused one.
+--- @param s table api.SessionInfo
+--- @return tend.commands.Session
+function Context:focus_session(s)
+    local session = self:track_session({
+        session_id = s.session_id,
+        stream_id = s.stream_id,
+        workspace_id = s.task and s.task.workspace_id or "",
+    })
+    self.active = s.session_id
+    return session
+end
+
+--- List the daemon's sessions, then focus the chosen one — tracking its stream
+--- (transcript) if not already followed — so :TendChat / :TendEvents target it.
+function Context:sessions_pick()
+    self:with_sessions(function(list)
         vim.ui.select(list, {
             prompt = "Session",
             format_item = function(s)
@@ -464,13 +516,43 @@ function Context:sessions_pick()
             if not choice then
                 return
             end
-            self:track_session({
-                session_id = choice.session_id,
-                stream_id = choice.stream_id,
-                workspace_id = choice.task and choice.task.workspace_id or "",
-            })
-            self.active = choice.session_id
+            self:focus_session(choice)
             info("tend: focused session " .. choice.session_id)
+        end)
+    end)
+end
+
+--- Route a task to an existing session: pick a task, pick a running session,
+--- and hand the task to it as a prompt turn (rather than starting a new session
+--- via :TendDelegate). The chosen session becomes the focused one.
+function Context:delegate_to()
+    self:with_tasks(function(tasks)
+        vim.ui.select(tasks, {
+            prompt = "Task to delegate",
+            format_item = task_label,
+        }, function(task)
+            if not task then
+                return
+            end
+            self:with_sessions(function(list)
+                vim.ui.select(list, {
+                    prompt = "Deliver to session",
+                    format_item = session_label,
+                }, function(s)
+                    if not s then
+                        return
+                    end
+                    self:focus_session(s)
+                    self.task = task
+                    self:prompt_turn(task_prompt(task))
+                    info(
+                        "tend: delegated "
+                            .. task.ref.id
+                            .. " to session "
+                            .. s.session_id
+                    )
+                end)
+            end)
         end)
     end)
 end

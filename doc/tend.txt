@@ -1141,6 +1141,13 @@ connection state, and the daemon's versions are reported under the
   approval prompts surface as floats. The new session becomes the focused
   one (see |:TendSessions|); previously started sessions stay tracked.
 
+                                                        *:TendDelegateTo*
+:TendDelegateTo
+  Route a task to an *existing* session: pick a task, then pick a running
+  session, and the task is handed to that session as a prompt turn (rather
+  than starting a new session as |:TendDelegate| does). The chosen session
+  becomes the focused one (see |:TendSessions|) for follow-up |:TendChat|.
+
                                                           *:TendSessions*
 :TendSessions
   List the daemon's active sessions — each with its provider, task, and

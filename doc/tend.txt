@@ -1098,12 +1098,17 @@ They are independent of the chat sidebar above and require a running
 The plugin pins minimum daemon API versions per method set and checks the
 daemon's reported versions during the connect handshake. On a mismatch the
 connection reports an error and stops (no reconnect loop) — upgrade `tendd`
-or the plugin, then run |:TendAttach| again. The pinned minimums, the
+or the plugin, then run |:TendConnect| again. The pinned minimums, the
 connection state, and the daemon's versions are reported under the
 "Daemon (tendd)" section of `:checkhealth tend`.
 
-                                                          *:TendAttach*
-:TendAttach
+Sessions and tasks are separate. A session is a conversation with an
+agent; a task is work authorization. Start a session with |:TendSessionNew|
+and chat with it freely — the daemon refuses file or command changes until
+a task is delegated to the session (see |:TendTaskPick|).
+
+                                                          *:TendConnect*
+:TendConnect
   Connect to the daemon (and keep reconnecting) and open the workspace
   containing the current working directory. Run this first.
 
@@ -1114,7 +1119,11 @@ connection state, and the daemon's versions are reported under the
 
                                                           *:TendTaskPick*
 :TendTaskPick
-  Pick the current task from the workspace's task list.
+  Pick a task from the workspace's task list and delegate it: choose a
+  target — a new session or a running one — and the task is handed to that
+  session as a prompt turn. The target becomes the focused session (see
+  |:TendSessionAttach|) for follow-up |:TendChat|. "New session" is always
+  offered, so this works even with no sessions running.
 
                                                           *:TendClaim*
 :TendClaim
@@ -1122,7 +1131,8 @@ connection state, and the daemon's versions are reported under the
 
                                                           *:TendProvider*
 :TendProvider
-  Pick the ACP provider (from `daemon.providers`) used for new sessions.
+  Pick the ACP provider (from `daemon.providers`) used as the default for
+  new sessions.
 
                                                           *:TendPersona*
 :TendPersona
@@ -1133,23 +1143,16 @@ connection state, and the daemon's versions are reported under the
   (`claude:reviewer`); on a name collision, workspace personas shadow
   imported agents, which shadow user personas.
 
-                                                          *:TendDelegate*
-:TendDelegate
-  Start an agent session on the current task (provider from
-  |:TendProvider| or the first configured one) and prompt for the first
-  instruction. The session's events render into a transcript buffer; its
-  approval prompts surface as floats. The new session becomes the focused
-  one (see |:TendSessions|); previously started sessions stay tracked.
+                                                        *:TendSessionNew*
+:TendSessionNew
+  Pick a configured provider and start a task-less session on the open
+  workspace, then focus it. The session converses immediately via
+  |:TendChat|; the daemon keeps file and command changes gated until a task
+  is delegated to it with |:TendTaskPick|. The session's events render into
+  a transcript buffer; its approval prompts surface as floats.
 
-                                                        *:TendDelegateTo*
-:TendDelegateTo
-  Route a task to an *existing* session: pick a task, then pick a running
-  session, and the task is handed to that session as a prompt turn (rather
-  than starting a new session as |:TendDelegate| does). The chosen session
-  becomes the focused one (see |:TendSessions|) for follow-up |:TendChat|.
-
-                                                          *:TendSessions*
-:TendSessions
+                                                     *:TendSessionAttach*
+:TendSessionAttach
   List the daemon's active sessions — each with its provider, task, and
   status (idle/running/waiting_approval/...) — and focus the one you pick.
   Focusing follows the session's event stream (transcript) and makes
@@ -1157,9 +1160,17 @@ connection state, and the daemon's versions are reported under the
   is marked. A session started in this editor stays tracked; selecting it
   again reuses its transcript.
 
+                                                 *:TendSessionDisconnect*
+:TendSessionDisconnect
+  Stop following a session in this editor: pick a tracked session and
+  detach from it — its event stream is unsubscribed and its transcript
+  dropped. The session keeps running on the daemon (this is a client-side
+  detach, not a stop), so |:TendSessionAttach| can pick it up again.
+
                                                           *:TendChat*
 :TendChat
-  Send another prompt turn to the focused session (see |:TendSessions|).
+  Send another prompt turn to the focused session (see
+  |:TendSessionAttach|).
 
                                                           *:TendEvents*
 :TendEvents

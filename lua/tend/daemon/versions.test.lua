@@ -20,22 +20,25 @@ describe("tend.daemon.versions", function()
         end
     )
 
-    it("requires the daemon version of the newest method it calls", function()
-        -- The plugin calls session.list (plugin_to_daemon 0.8.0) for
-        -- :TendSessions; a daemon that predates it (e.g. 0.6.0, which had
-        -- file.diff but not session.list) must be rejected at the handshake,
-        -- not fail later when the command first runs.
-        assert.is_false(Versions.satisfies({
-            plugin_to_daemon = "0.6.0",
-            daemon_to_editor = "0.2.0",
-            daemon_to_client = "0.1.0",
-        }))
-        assert.is_true(Versions.satisfies({
-            plugin_to_daemon = "0.8.0",
-            daemon_to_editor = "0.2.0",
-            daemon_to_client = "0.1.0",
-        }))
-    end)
+    it(
+        "requires the daemon version of the newest contract it relies on",
+        function()
+            -- :TendSessionNew relies on task-optional agent.start (plugin_to_daemon
+            -- 0.9.0); a daemon that predates it (e.g. 0.8.0, which had session.list
+            -- but still required a task on agent.start) must be rejected at the
+            -- handshake, not fail later when the command first runs.
+            assert.is_false(Versions.satisfies({
+                plugin_to_daemon = "0.8.0",
+                daemon_to_editor = "0.2.0",
+                daemon_to_client = "0.1.0",
+            }))
+            assert.is_true(Versions.satisfies({
+                plugin_to_daemon = "0.9.0",
+                daemon_to_editor = "0.2.0",
+                daemon_to_client = "0.1.0",
+            }))
+        end
+    )
 
     it("accepts versions equal to the pin", function()
         local ok, why = Versions.satisfies({

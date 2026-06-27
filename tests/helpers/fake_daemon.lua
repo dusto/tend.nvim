@@ -28,7 +28,7 @@ M.FakeDaemon = FakeDaemon
 -- The daemon contract versions the fake reports: the real shape, satisfying
 -- the plugin's pin.
 M.VERSIONS = {
-    plugin_to_daemon = "0.8.0",
+    plugin_to_daemon = "0.9.0",
     daemon_to_editor = "0.2.0",
     daemon_to_client = "0.1.0",
 }

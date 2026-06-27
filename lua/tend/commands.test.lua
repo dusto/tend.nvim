@@ -44,8 +44,12 @@ describe("tend.commands", function()
                 started = 0,
                 subscriber = {
                     tracked = {},
+                    untracked = {},
                     track = function(self, spec)
                         table.insert(self.tracked, spec)
+                    end,
+                    untrack = function(self, stream_id)
+                        table.insert(self.untracked, stream_id)
                     end,
                 },
                 approvals = {
@@ -101,6 +105,9 @@ describe("tend.commands", function()
                     status = "open",
                 }
             end
+            -- Start and focus a task-less session ses-1 via :TendSessionNew
+            -- (provider #1 = codex). Resets ui_choice afterward so a test's own
+            -- selection is not shadowed.
             _G.give_session = function()
                 _G.give_workspace()
                 _G.replies["agent.start"] = {
@@ -110,10 +117,9 @@ describe("tend.commands", function()
                         status = "idle",
                     },
                 }
-                _G.give_task()
-                _G.ctx.provider_id = "codex"
-                _G.ui_input = "go"
-                vim.cmd("TendDelegate")
+                _G.ui_choice = 1
+                vim.cmd("TendSessionNew")
+                _G.ui_choice = nil
             end
         ]])
     end)
@@ -141,15 +147,15 @@ describe("tend.commands", function()
             return out
         ]])
         for _, name in ipairs({
-            "TendAttach",
+            "TendConnect",
             "TendTaskNew",
             "TendTaskPick",
             "TendClaim",
             "TendProvider",
             "TendPersona",
-            "TendDelegate",
-            "TendDelegateTo",
-            "TendSessions",
+            "TendSessionNew",
+            "TendSessionAttach",
+            "TendSessionDisconnect",
             "TendChat",
             "TendEvents",
             "TendApprove",
@@ -158,16 +164,25 @@ describe("tend.commands", function()
         }) do
             assert.is_true(names[name] == true)
         end
+        -- The old verbs are gone (renamed / folded into :TendTaskPick).
+        for _, gone in ipairs({
+            "TendAttach",
+            "TendDelegate",
+            "TendDelegateTo",
+            "TendSessions",
+        }) do
+            assert.is_nil(names[gone])
+        end
     end)
 
     it(
-        "TendAttach starts the connection and opens the cwd workspace",
+        "TendConnect starts the connection and opens the cwd workspace",
         function()
             child.lua([[
             _G.replies["workspace.open"] = {
                 result = { workspace_id = "ws-1", worktree_root = "/repo" },
             }
-            vim.cmd("TendAttach")
+            vim.cmd("TendConnect")
         ]])
             assert.equal(1, child.lua_get("_G.conn.started"))
             local sent = calls()
@@ -180,7 +195,7 @@ describe("tend.commands", function()
     it("TendTaskNew requires a workspace", function()
         child.lua([[vim.cmd("TendTaskNew")]])
         assert.same({}, calls())
-        assert.is_not_nil(last_notice().msg:find("TendAttach", 1, true))
+        assert.is_not_nil(last_notice().msg:find("TendConnect", 1, true))
     end)
 
     it("TendTaskNew creates a task from the entered title", function()
@@ -214,9 +229,10 @@ describe("tend.commands", function()
         assert.same({}, calls())
     end)
 
-    it("TendTaskPick selects the current task from the list", function()
+    it("TendTaskPick delegates the picked task to a new session", function()
         child.lua([[
             _G.give_workspace()
+            _G.ctx.provider_id = "codex"
             _G.replies["task.list"] = {
                 result = {
                     tasks = {
@@ -224,6 +240,7 @@ describe("tend.commands", function()
                             ref = { provider = "beads", workspace_id = "ws-1", id = "t-1" },
                             title = "one",
                             status = "open",
+                            description = "do one",
                         },
                         {
                             ref = { provider = "beads", workspace_id = "ws-1", id = "t-2" },
@@ -233,14 +250,82 @@ describe("tend.commands", function()
                     },
                 },
             }
-            _G.ui_choice = 2
+            _G.replies["session.list"] = { result = { sessions = {} } }
+            _G.replies["agent.start"] = {
+                result = { session_id = "ses-N", stream_id = "str-N", status = "idle" },
+            }
+            _G.ui_choices = { 1, 1 } -- task #1, then target #1 = "+ New session"
             vim.cmd("TendTaskPick")
         ]])
         local sent = calls()
         assert.equal("task.list", sent[1].method)
         assert.same({ workspace_id = "ws-1" }, sent[1].params)
-        assert.equal("t-2", child.lua_get("_G.ctx.task.ref.id"))
+        assert.equal("session.list", sent[2].method)
+        -- A new session is started bound to the task, then handed the task.
+        assert.equal("agent.start", sent[3].method)
+        assert.same({
+            provider_id = "codex",
+            workspace_id = "ws-1",
+            worktree_root = "/repo",
+            task = { provider = "beads", workspace_id = "ws-1", id = "t-1" },
+        }, sent[3].params)
+        assert.equal("agent.prompt", sent[4].method)
+        assert.equal("ses-N", sent[4].params.session_id)
+        assert.is_not_nil(sent[4].params.text:find("t-1", 1, true))
+        assert.is_not_nil(sent[4].params.text:find("do one", 1, true))
+        assert.equal("ses-N", child.lua_get("_G.ctx.active"))
+        assert.equal("t-1", child.lua_get("_G.ctx.task.ref.id"))
     end)
+
+    it(
+        "TendTaskPick delegates the picked task to an existing session",
+        function()
+            child.lua([[
+            _G.give_workspace()
+            _G.replies["task.list"] = {
+                result = {
+                    tasks = {
+                        {
+                            ref = { provider = "beads", workspace_id = "ws-1", id = "t-7" },
+                            title = "fix",
+                            status = "open",
+                            description = "the details",
+                        },
+                    },
+                },
+            }
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-9",
+                            provider_id = "codex",
+                            stream_id = "str-9",
+                            status = "idle",
+                            workspace_id = "ws-1",
+                            task = { workspace_id = "ws-1", id = "t-2" },
+                        },
+                    },
+                },
+            }
+            _G.ui_choices = { 1, 2 } -- task #1, then target #2 = ses-9 (#1 is new)
+            vim.cmd("TendTaskPick")
+        ]])
+            local sent = calls()
+            assert.equal("task.list", sent[1].method)
+            assert.equal("session.list", sent[2].method)
+            -- The task is handed to the EXISTING session, not a fresh agent.start.
+            assert.equal("agent.prompt", sent[3].method)
+            assert.equal("ses-9", sent[3].params.session_id)
+            assert.is_not_nil(sent[3].params.text:find("t-7", 1, true))
+            assert.is_not_nil(sent[3].params.text:find("the details", 1, true))
+            for _, c in ipairs(sent) do
+                assert.is_not.equal("agent.start", c.method)
+            end
+            assert.equal("ses-9", child.lua_get("_G.ctx.active"))
+            assert.equal("t-7", child.lua_get("_G.ctx.task.ref.id"))
+        end
+    )
 
     it("TendClaim claims the current task for the assignee", function()
         child.lua([[
@@ -315,17 +400,24 @@ describe("tend.commands", function()
         assert.equal("Review the diff.", child.lua_get("_G.ctx.persona.prompt"))
     end)
 
-    it("TendDelegate starts a session and sends the first prompt", function()
-        child.lua([[_G.give_session()]])
+    it("TendSessionNew starts a task-less session and focuses it", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["agent.start"] = {
+                result = { session_id = "ses-1", stream_id = "str-1", status = "idle" },
+            }
+            _G.ui_choice = 2 -- pick provider #2 = claude
+            vim.cmd("TendSessionNew")
+        ]])
         local sent = calls()
         assert.equal("agent.start", sent[1].method)
+        -- No task: a task-less session carries only provider + workspace.
         assert.same({
-            provider_id = "codex",
-            task = { provider = "beads", workspace_id = "ws-1", id = "t-1" },
+            provider_id = "claude",
+            workspace_id = "ws-1",
             worktree_root = "/repo",
         }, sent[1].params)
-        assert.equal("agent.prompt", sent[2].method)
-        assert.same({ session_id = "ses-1", text = "go" }, sent[2].params)
+        assert.is_nil(sent[1].params.task)
         assert.equal(
             "ses-1",
             child.lua_get("_G.ctx:active_session().session_id")
@@ -340,13 +432,14 @@ describe("tend.commands", function()
         )
     end)
 
-    it("TendDelegate without a task reports instead of calling", function()
-        child.lua([[
-            _G.give_workspace()
-            vim.cmd("TendDelegate")
-        ]])
-        assert.same({}, calls())
-    end)
+    it(
+        "TendSessionNew without a workspace reports instead of calling",
+        function()
+            child.lua([[vim.cmd("TendSessionNew")]])
+            assert.same({}, calls())
+            assert.is_not_nil(last_notice().msg:find("TendConnect", 1, true))
+        end
+    )
 
     it("session events fan out to the transcript and approvals", function()
         child.lua([[
@@ -388,7 +481,7 @@ describe("tend.commands", function()
     it("TendChat without a session reports instead of calling", function()
         child.lua([[vim.cmd("TendChat")]])
         assert.same({}, calls())
-        assert.is_not_nil(last_notice().msg:find("TendDelegate", 1, true))
+        assert.is_not_nil(last_notice().msg:find("TendSessionNew", 1, true))
     end)
 
     it("TendEvents opens the transcript buffer in a window", function()
@@ -408,7 +501,7 @@ describe("tend.commands", function()
         assert.is_true(shown)
     end)
 
-    it("TendSessions lists sessions and focuses the chosen one", function()
+    it("TendSessionAttach lists sessions and focuses the chosen one", function()
         child.lua([[
             _G.give_workspace()
             _G.replies["session.list"] = {
@@ -419,6 +512,7 @@ describe("tend.commands", function()
                             provider_id = "codex",
                             stream_id = "str-A",
                             status = "running",
+                            workspace_id = "ws-1",
                             task = { workspace_id = "ws-1", id = "t-1" },
                         },
                         {
@@ -426,36 +520,41 @@ describe("tend.commands", function()
                             provider_id = "codex",
                             stream_id = "str-B",
                             status = "idle",
-                            task = { workspace_id = "ws-1", id = "t-2" },
+                            workspace_id = "ws-1",
                         },
                     },
                 },
             }
             _G.ui_choice = 2 -- pick ses-B
-            vim.cmd("TendSessions")
+            vim.cmd("TendSessionAttach")
         ]])
         local sent = calls()
         assert.equal("session.list", sent[1].method)
         assert.same({ workspace_id = "ws-1" }, sent[1].params)
-        -- The chosen session is focused and its stream tracked.
+        -- The chosen (task-less) session is focused and its stream tracked,
+        -- carrying the workspace the daemon reports independent of any task.
         assert.equal("ses-B", child.lua_get("_G.ctx.active"))
         assert.equal(
             "str-B",
             child.lua_get("_G.conn.subscriber.tracked[1].stream_id")
         )
+        assert.equal(
+            "ws-1",
+            child.lua_get("_G.conn.subscriber.tracked[1].workspace_id")
+        )
     end)
 
-    it("TendSessions reports when there are no sessions", function()
+    it("TendSessionAttach reports when there are no sessions", function()
         child.lua([[
             _G.replies["session.list"] = { result = { sessions = {} } }
-            vim.cmd("TendSessions")
+            vim.cmd("TendSessionAttach")
         ]])
         assert.is_not_nil(last_notice().msg:find("no active sessions", 1, true))
     end)
 
     it("tracks multiple sessions; chat targets the focused one", function()
         child.lua([[
-            -- First delegate -> ses-1 tracked and focused.
+            -- First :TendSessionNew -> ses-1 tracked and focused.
             _G.give_session()
             -- A second session started independently, then focused via select.
             _G.replies["session.list"] = {
@@ -466,13 +565,14 @@ describe("tend.commands", function()
                             provider_id = "codex",
                             stream_id = "str-2",
                             status = "idle",
+                            workspace_id = "ws-1",
                             task = { workspace_id = "ws-1", id = "t-2" },
                         },
                     },
                 },
             }
             _G.ui_choice = 1
-            vim.cmd("TendSessions")
+            vim.cmd("TendSessionAttach")
         ]])
         -- Both sessions are tracked locally; ses-2 is now focused.
         assert.is_true(child.lua_get("_G.ctx.sessions['ses-1'] ~= nil"))
@@ -501,13 +601,13 @@ describe("tend.commands", function()
                             provider_id = "codex",
                             stream_id = "str-1",
                             status = "idle",
-                            task = { workspace_id = "ws-1", id = "t-1" },
+                            workspace_id = "ws-1",
                         },
                     },
                 },
             }
             _G.ui_choice = 1
-            vim.cmd("TendSessions")
+            vim.cmd("TendSessionAttach")
         ]])
         -- Selecting an already-tracked session does not re-subscribe.
         assert.equal(
@@ -516,81 +616,33 @@ describe("tend.commands", function()
         )
     end)
 
-    it("TendDelegateTo routes a picked task to a chosen session", function()
+    it("TendSessionDisconnect detaches a tracked session", function()
         child.lua([[
-            _G.give_workspace()
-            _G.replies["task.list"] = {
-                result = {
-                    tasks = {
-                        {
-                            ref = { provider = "beads", workspace_id = "ws-1", id = "t-7" },
-                            title = "fix it",
-                            status = "open",
-                            description = "the details",
-                        },
-                    },
-                },
-            }
-            _G.replies["session.list"] = {
-                result = {
-                    sessions = {
-                        {
-                            session_id = "ses-9",
-                            provider_id = "codex",
-                            stream_id = "str-9",
-                            status = "idle",
-                            task = { workspace_id = "ws-1", id = "t-2" },
-                        },
-                    },
-                },
-            }
-            _G.ui_choices = { 1, 1 } -- task #1, then session #1
-            vim.cmd("TendDelegateTo")
+            _G.give_session() -- ses-1 tracked + focused
+            _G.disconnected_buf = _G.ctx:active_session().bufnr
+            _G.ui_choice = 1 -- only one tracked session
+            vim.cmd("TendSessionDisconnect")
         ]])
-        local sent = calls()
-        assert.equal("task.list", sent[1].method)
-        assert.equal("session.list", sent[2].method)
-        -- The task is handed to the EXISTING session via agent.prompt, not a
-        -- fresh agent.start.
-        assert.equal("agent.prompt", sent[3].method)
-        assert.equal("ses-9", sent[3].params.session_id)
-        assert.is_not_nil(sent[3].params.text:find("t-7", 1, true))
-        assert.is_not_nil(sent[3].params.text:find("the details", 1, true))
-        for _, c in ipairs(sent) do
-            assert.is_not.equal("agent.start", c.method)
+        -- The session is untracked locally and its stream unsubscribed, but no
+        -- agent.stop is sent — the daemon session keeps running.
+        assert.equal("str-1", child.lua_get("_G.conn.subscriber.untracked[1]"))
+        assert.is_true(child.lua_get("_G.ctx.sessions['ses-1'] == nil"))
+        assert.is_true(child.lua_get("_G.ctx.active == nil"))
+        for _, c in ipairs(calls()) do
+            assert.is_not.equal("agent.stop", c.method)
         end
-        -- The chosen session is focused for follow-up chat.
-        assert.equal("ses-9", child.lua_get("_G.ctx.active"))
-        assert.equal("t-7", child.lua_get("_G.ctx.task.ref.id"))
+        assert.is_false(
+            child.lua_get("vim.api.nvim_buf_is_valid(_G.disconnected_buf)")
+        )
     end)
 
-    it(
-        "TendDelegateTo reports when there are no sessions to route to",
-        function()
-            child.lua([[
-            _G.give_workspace()
-            _G.replies["task.list"] = {
-                result = {
-                    tasks = {
-                        { ref = { provider = "beads", workspace_id = "ws-1", id = "t-1" }, title = "x", status = "open" },
-                    },
-                },
-            }
-            _G.replies["session.list"] = { result = { sessions = {} } }
-            _G.ui_choices = { 1 }
-            vim.cmd("TendDelegateTo")
-        ]])
-            local sent = calls()
-            -- Task picked and sessions listed, but nothing routed.
-            assert.equal("session.list", sent[#sent].method)
-            for _, c in ipairs(sent) do
-                assert.is_not.equal("agent.prompt", c.method)
-            end
-            assert.is_not_nil(
-                last_notice().msg:find("no active sessions", 1, true)
-            )
-        end
-    )
+    it("TendSessionDisconnect reports when nothing is tracked", function()
+        child.lua([[vim.cmd("TendSessionDisconnect")]])
+        assert.same({}, calls())
+        assert.is_not_nil(
+            last_notice().msg:find("no tracked sessions", 1, true)
+        )
+    end)
 
     it("setup stops the previous context's connection", function()
         child.lua([[

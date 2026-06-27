@@ -135,29 +135,33 @@ end
 function Context:register_commands()
     local defs = {
         {
-            "TendAttach",
-            "attach",
+            "TendConnect",
+            "connect",
             "Connect to tendd and open the cwd workspace",
         },
         { "TendTaskNew", "task_new", "Create a task and make it current" },
-        { "TendTaskPick", "task_pick", "Pick the current task" },
+        {
+            "TendTaskPick",
+            "task_pick",
+            "Pick a task and delegate it to a session",
+        },
         { "TendClaim", "claim", "Claim the current task" },
         { "TendProvider", "provider_pick", "Pick the ACP provider" },
         { "TendPersona", "persona_pick", "Pick a persona" },
         {
-            "TendDelegate",
-            "delegate",
-            "Start an agent session on the current task",
+            "TendSessionNew",
+            "session_new",
+            "Start a task-less session on a chosen provider",
         },
         {
-            "TendDelegateTo",
-            "delegate_to",
-            "Route a picked task to an existing session",
-        },
-        {
-            "TendSessions",
-            "sessions_pick",
+            "TendSessionAttach",
+            "session_attach",
             "List active sessions and focus one",
+        },
+        {
+            "TendSessionDisconnect",
+            "session_disconnect",
+            "Stop following a session in this editor",
         },
         { "TendChat", "chat", "Send a prompt to the focused session" },
         { "TendEvents", "events", "Open the focused session's transcript" },
@@ -179,7 +183,7 @@ function Context:register_commands()
 end
 
 --- Connect to the daemon and open the cwd workspace.
-function Context:attach()
+function Context:connect()
     self.conn:start()
     self.conn:when_connected(function()
         local dir = vim.fn.getcwd()
@@ -200,7 +204,7 @@ end
 --- @return table|nil workspace
 function Context:need_workspace()
     if not self.workspace then
-        report("tend: no workspace; run :TendAttach first")
+        report("tend: no workspace; run :TendConnect first")
         return nil
     end
     return self.workspace
@@ -265,16 +269,20 @@ function Context:with_tasks(cb)
     end)
 end
 
---- Pick the current task from the workspace's task list.
+--- Pick a task from the workspace's task list and delegate it: make it the
+--- current task, then choose a target — a new session or an existing one — and
+--- hand the task to it as a prompt turn.
 function Context:task_pick()
     self:with_tasks(function(tasks)
         vim.ui.select(tasks, {
             prompt = "Task",
             format_item = task_label,
         }, function(task)
-            if task then
-                self.task = task
+            if not task then
+                return
             end
+            self.task = task
+            self:deliver_task(task)
         end)
     end)
 end
@@ -304,15 +312,26 @@ function Context:claim()
     end)
 end
 
---- Pick the ACP provider used for new sessions.
+--- Pick the ACP provider used as the default for new sessions.
 function Context:provider_pick()
+    self:pick_provider(function(provider_id)
+        self.provider_id = provider_id
+    end)
+end
+
+--- @private
+--- Choose a configured provider and pass it to cb. Reports and skips cb when
+--- none are configured. The selection is not stored as the default — callers
+--- that want that (provider_pick) do it themselves.
+--- @param cb fun(provider_id: string)
+function Context:pick_provider(cb)
     if #self.providers == 0 then
         report("tend: no providers configured (daemon.providers)")
         return
     end
     vim.ui.select(self.providers, { prompt = "Provider" }, function(provider_id)
         if provider_id then
-            self.provider_id = provider_id
+            cb(provider_id)
         end
     end)
 end
@@ -416,39 +435,56 @@ function Context:prompt_turn(text)
     end)
 end
 
---- Start an agent session on the current task, track it, focus it, and send the
---- first prompt. Previously-started sessions stay tracked and selectable.
-function Context:delegate()
-    local ws = self:need_workspace()
+--- @private
+--- Start a session on the open workspace, track and focus it, and pass the
+--- tracked session to cb. task may be nil for a task-less (conversation)
+--- session; when set, the session is started bound to that task. Requires a
+--- workspace (caller checks). Previously-started sessions stay tracked.
+--- @param provider string
+--- @param task table|nil api.Task
+--- @param cb fun(session: tend.commands.Session)
+function Context:start_session(provider, task, cb)
+    local ws = self.workspace
     if not ws then
         return
     end
-    local task = self:need_task()
-    if not task then
-        return
-    end
-    local provider = self.provider_id or self.providers[1]
-    if not provider then
-        report(
-            "tend: no provider; run :TendProvider or configure daemon.providers"
-        )
-        return
-    end
-    self:call("agent.start", {
+    local params = {
         provider_id = provider,
-        task = task.ref,
+        workspace_id = ws.workspace_id,
         worktree_root = ws.worktree_root,
-    }, function(started)
-        self:track_session({
+    }
+    if task then
+        params.task = task.ref
+    end
+    self:call("agent.start", params, function(started)
+        local session = self:track_session({
             session_id = started.session_id,
             stream_id = started.stream_id,
             workspace_id = ws.workspace_id,
         })
         self.active = started.session_id
-        vim.ui.input({ prompt = "Instruction: " }, function(text)
-            if text and text ~= "" then
-                self:prompt_turn(text)
-            end
+        cb(session)
+    end)
+end
+
+--- Start a task-less session: pick a provider, create a conversation session on
+--- the open workspace (no task bound), and focus it. Work the session performs
+--- stays task-gated by the daemon until a task is delegated to it
+--- (see |:TendTaskPick|); this just gets a session going to chat with.
+function Context:session_new()
+    local ws = self:need_workspace()
+    if not ws then
+        return
+    end
+    self:pick_provider(function(provider)
+        self:start_session(provider, nil, function(session)
+            info(
+                "tend: started session "
+                    .. session.session_id
+                    .. " ("
+                    .. provider
+                    .. ")"
+            )
         end)
     end)
 end
@@ -481,7 +517,7 @@ function Context:with_sessions(cb)
     self:call("session.list", params, function(result)
         local list = result.sessions or {}
         if #list == 0 then
-            report("tend: no active sessions; run :TendDelegate to start one")
+            report("tend: no active sessions; run :TendSessionNew to start one")
             return
         end
         cb(list)
@@ -496,7 +532,10 @@ function Context:focus_session(s)
     local session = self:track_session({
         session_id = s.session_id,
         stream_id = s.stream_id,
-        workspace_id = s.task and s.task.workspace_id or "",
+        -- The daemon reports a session's workspace independent of its task, so a
+        -- task-less session still carries one; fall back to the task's for an
+        -- older daemon.
+        workspace_id = s.workspace_id or (s.task and s.task.workspace_id) or "",
     })
     self.active = s.session_id
     return session
@@ -504,7 +543,7 @@ end
 
 --- List the daemon's sessions, then focus the chosen one — tracking its stream
 --- (transcript) if not already followed — so :TendChat / :TendEvents target it.
-function Context:sessions_pick()
+function Context:session_attach()
     self:with_sessions(function(list)
         vim.ui.select(list, {
             prompt = "Session",
@@ -522,45 +561,129 @@ function Context:sessions_pick()
     end)
 end
 
---- Route a task to an existing session: pick a task, pick a running session,
---- and hand the task to it as a prompt turn (rather than starting a new session
---- via :TendDelegate). The chosen session becomes the focused one.
-function Context:delegate_to()
-    self:with_tasks(function(tasks)
-        vim.ui.select(tasks, {
-            prompt = "Task to delegate",
-            format_item = task_label,
-        }, function(task)
-            if not task then
+--- @private
+--- Hand a task to a session: list the workspace's sessions and offer them
+--- alongside a "new session" target. Picking an existing session delivers the
+--- task to it as a prompt turn; picking "new session" starts a fresh session
+--- bound to the task. The target becomes the focused session for follow-up
+--- |:TendChat|. Offered even when no sessions exist (new session is always a
+--- choice), so it does not dead-end like |:TendSessionAttach|.
+--- @param task table api.Task
+function Context:deliver_task(task)
+    local ws = self.workspace
+    local params = ws and { workspace_id = ws.workspace_id } or {}
+    self:call("session.list", params, function(result)
+        local sessions = result.sessions or {}
+        -- A synthetic "new session" target leads the list so it is always
+        -- reachable, including when there are no running sessions.
+        local new_target = { __new = true }
+        local options = { new_target }
+        for _, s in ipairs(sessions) do
+            table.insert(options, s)
+        end
+        vim.ui.select(options, {
+            prompt = "Deliver " .. task.ref.id .. " to",
+            format_item = function(o)
+                if o.__new then
+                    return "+ New session"
+                end
+                return session_label(o)
+            end,
+        }, function(choice)
+            if not choice then
                 return
             end
-            self:with_sessions(function(list)
-                vim.ui.select(list, {
-                    prompt = "Deliver to session",
-                    format_item = session_label,
-                }, function(s)
-                    if not s then
-                        return
-                    end
-                    self:focus_session(s)
-                    self.task = task
-                    self:prompt_turn(task_prompt(task))
-                    info(
-                        "tend: delegated "
-                            .. task.ref.id
-                            .. " to session "
-                            .. s.session_id
-                    )
-                end)
-            end)
+            if choice.__new then
+                self:start_session_for_task(task)
+            else
+                self:focus_session(choice)
+                self:prompt_turn(task_prompt(task))
+                info(
+                    "tend: delegated "
+                        .. task.ref.id
+                        .. " to session "
+                        .. choice.session_id
+                )
+            end
         end)
     end)
+end
+
+--- @private
+--- Start a new session bound to a task (provider from |:TendProvider| or the
+--- first configured one), focus it, and hand it the task as its first turn.
+--- @param task table api.Task
+function Context:start_session_for_task(task)
+    local provider = self.provider_id or self.providers[1]
+    if not provider then
+        report(
+            "tend: no provider; run :TendProvider or configure daemon.providers"
+        )
+        return
+    end
+    self:start_session(provider, task, function(session)
+        self:prompt_turn(task_prompt(task))
+        info(
+            "tend: delegated "
+                .. task.ref.id
+                .. " to new session "
+                .. session.session_id
+        )
+    end)
+end
+
+--- Stop following a session in this editor: pick a locally-tracked session and
+--- detach from it — unsubscribe its stream and drop its transcript. The session
+--- itself keeps running on the daemon (this is a client-side detach, not
+--- |agent.stop|), so |:TendSessionAttach| can pick it up again later.
+function Context:session_disconnect()
+    local tracked = {}
+    for _, session in pairs(self.sessions) do
+        table.insert(tracked, session)
+    end
+    if #tracked == 0 then
+        report("tend: no tracked sessions to disconnect")
+        return
+    end
+    table.sort(tracked, function(a, b)
+        return a.session_id < b.session_id
+    end)
+    vim.ui.select(tracked, {
+        prompt = "Disconnect session",
+        format_item = function(s)
+            local marker = (s.session_id == self.active) and "● " or "  "
+            return marker .. s.session_id
+        end,
+    }, function(session)
+        if not session then
+            return
+        end
+        self:disconnect_session(session)
+        info("tend: disconnected session " .. session.session_id)
+    end)
+end
+
+--- @private
+--- Detach a tracked session: unsubscribe its stream, drop the local record and
+--- its transcript buffer, and clear focus if it was focused.
+--- @param session tend.commands.Session
+function Context:disconnect_session(session)
+    self.conn.subscriber:untrack(session.stream_id)
+    self.sessions[session.session_id] = nil
+    if self.active == session.session_id then
+        self.active = nil
+    end
+    if vim.api.nvim_buf_is_valid(session.bufnr) then
+        vim.api.nvim_buf_delete(session.bufnr, { force = true })
+    end
 end
 
 --- Send a prompt turn to the focused session.
 function Context:chat()
     if not self:active_session() then
-        report("tend: no focused session; run :TendDelegate or :TendSessions")
+        report(
+            "tend: no focused session; run :TendSessionNew or :TendSessionAttach"
+        )
         return
     end
     vim.ui.input({ prompt = "Prompt: " }, function(text)
@@ -574,7 +697,9 @@ end
 function Context:events()
     local session = self:active_session()
     if not session then
-        report("tend: no focused session; run :TendDelegate or :TendSessions")
+        report(
+            "tend: no focused session; run :TendSessionNew or :TendSessionAttach"
+        )
         return
     end
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do

@@ -12,11 +12,12 @@ local M = {}
 --- The minimum contract versions this plugin requires per method set.
 --- plugin_to_daemon 0.2.0 is the first version with task.*.
 M.REQUIRED = {
-    -- 0.8.0 introduced session.list/claim, which :TendSessions calls (0.6.0
-    -- added file.diff for :TendDiff). Pin the highest method this plugin calls
-    -- so an older daemon is rejected at the handshake, not mid-session when a
-    -- command first runs.
-    plugin_to_daemon = "0.8.0",
+    -- 0.9.0 made agent.start's task optional, which :TendSessionNew relies on to
+    -- start a task-less session (0.8.0 added session.list/claim for
+    -- :TendSessionAttach; 0.6.0 added file.diff for :TendDiff). Pin the highest
+    -- contract this plugin relies on so an older daemon is rejected at the
+    -- handshake, not mid-session when a command first runs.
+    plugin_to_daemon = "0.9.0",
     -- The plugin serves editor.open / editor.diff (daemon->editor 0.2.0); pin it
     -- so we never try to render a diff payload a too-old daemon cannot send.
     daemon_to_editor = "0.2.0",

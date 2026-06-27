@@ -57,21 +57,20 @@ describe("daemon smoke", function()
         return false
     end
 
-    --- :TendAttach and wait until the workspace is resolved.
+    --- :TendConnect and wait until the workspace is resolved.
     local function attach()
-        child.cmd("TendAttach")
+        child.cmd("TendConnect")
         assert.is_true(wait_for("_G.ctx.workspace ~= nil"))
     end
 
-    --- Create a task and delegate a session with the given first instruction.
+    --- Start a task-less session (provider picked = the first, codex) and send
+    --- it the given prompt turn.
     --- @param instruction string
-    local function delegate(instruction)
-        child.lua([[_G.ui_input = "fix bug"]])
-        child.cmd("TendTaskNew")
-        assert.is_true(wait_for("_G.ctx.task ~= nil"))
-        child.lua(string.format([[_G.ui_input = %q]], instruction))
-        child.cmd("TendDelegate")
+    local function start_session(instruction)
+        child.cmd("TendSessionNew")
         assert.is_true(wait_for("_G.ctx:active_session() ~= nil"))
+        child.lua(string.format([[_G.ui_input = %q]], instruction))
+        child.cmd("TendChat")
     end
 
     --- @param expr string an expression yielding a params table in the child
@@ -97,13 +96,15 @@ describe("daemon smoke", function()
         assert.equal("connected", child.lua_get("_G.ctx.conn:info().status"))
     end)
 
-    it("delegate runs a turn and streams it into the transcript", function()
+    it("a session runs a turn and streams it into the transcript", function()
         attach()
-        delegate("do it")
+        start_session("do it")
 
         local start = params("_G.daemon:calls_for('agent.start')[1]")
         assert.equal("codex", start.provider_id)
-        assert.equal("t-1", start.task.id)
+        assert.equal("ws-1", start.workspace_id)
+        -- A task-less session: no task is sent on start.
+        assert.is_nil(start.task)
         assert.equal(child.lua_get("vim.fn.getcwd()"), start.worktree_root)
 
         local subscribe = params("_G.daemon:calls_for('events.subscribe')[1]")
@@ -170,7 +171,7 @@ describe("daemon smoke", function()
 
     it("reconnects after a drop and keeps streaming events", function()
         attach()
-        delegate("go")
+        start_session("go")
         child.lua([[
             _G.daemon:push_event({
                 stream_id = "str-ses-1",

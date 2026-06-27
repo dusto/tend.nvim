@@ -182,7 +182,7 @@ describe("Health", function()
         Health.check()
         local found = false
         for _, call in ipairs(info_stub.calls) do
-            if tostring(call[1]):find("TendAttach", 1, true) then
+            if tostring(call[1]):find("TendConnect", 1, true) then
                 found = true
             end
         end

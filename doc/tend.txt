@@ -1138,16 +1138,26 @@ connection state, and the daemon's versions are reported under the
   Start an agent session on the current task (provider from
   |:TendProvider| or the first configured one) and prompt for the first
   instruction. The session's events render into a transcript buffer; its
-  approval prompts surface as floats.
+  approval prompts surface as floats. The new session becomes the focused
+  one (see |:TendSessions|); previously started sessions stay tracked.
+
+                                                          *:TendSessions*
+:TendSessions
+  List the daemon's active sessions — each with its provider, task, and
+  status (idle/running/waiting_approval/...) — and focus the one you pick.
+  Focusing follows the session's event stream (transcript) and makes
+  |:TendChat| and |:TendEvents| target it. The currently focused session
+  is marked. A session started in this editor stays tracked; selecting it
+  again reuses its transcript.
 
                                                           *:TendChat*
 :TendChat
-  Send another prompt turn to the current session.
+  Send another prompt turn to the focused session (see |:TendSessions|).
 
                                                           *:TendEvents*
 :TendEvents
-  Open the current session's transcript in a vertical split (or focus it
-  when already visible).
+  Open the focused session's transcript in a vertical split (or focus the
+  window when already visible).
 
                                                           *:TendApprove*
 :TendApprove

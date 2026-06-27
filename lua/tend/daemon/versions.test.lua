@@ -20,17 +20,18 @@ describe("tend.daemon.versions", function()
         end
     )
 
-    it("requires the daemon version that introduced file.diff", function()
-        -- The plugin calls file.diff (plugin_to_daemon 0.6.0) for the review
-        -- commands; an older daemon must be rejected at the handshake, not fail
-        -- later when :TendDiff first runs.
+    it("requires the daemon version of the newest method it calls", function()
+        -- The plugin calls session.list (plugin_to_daemon 0.8.0) for
+        -- :TendSessions; a daemon that predates it (e.g. 0.6.0, which had
+        -- file.diff but not session.list) must be rejected at the handshake,
+        -- not fail later when the command first runs.
         assert.is_false(Versions.satisfies({
-            plugin_to_daemon = "0.5.0",
+            plugin_to_daemon = "0.6.0",
             daemon_to_editor = "0.2.0",
             daemon_to_client = "0.1.0",
         }))
         assert.is_true(Versions.satisfies({
-            plugin_to_daemon = "0.6.0",
+            plugin_to_daemon = "0.8.0",
             daemon_to_editor = "0.2.0",
             daemon_to_client = "0.1.0",
         }))

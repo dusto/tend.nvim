@@ -71,7 +71,7 @@ describe("daemon smoke", function()
         assert.is_true(wait_for("_G.ctx.task ~= nil"))
         child.lua(string.format([[_G.ui_input = %q]], instruction))
         child.cmd("TendDelegate")
-        assert.is_true(wait_for("_G.ctx.session ~= nil"))
+        assert.is_true(wait_for("_G.ctx:active_session() ~= nil"))
     end
 
     --- @param expr string an expression yielding a params table in the child
@@ -124,7 +124,7 @@ describe("daemon smoke", function()
             })
         ]])
         assert.is_true(wait_for([[vim.tbl_contains(
-                vim.api.nvim_buf_get_lines(_G.ctx.session.bufnr, 0, -1, false),
+                vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false),
                 "hello from agent"
             )]]))
     end)
@@ -182,7 +182,7 @@ describe("daemon smoke", function()
             })
         ]])
         assert.is_true(wait_for([[vim.tbl_contains(
-                vim.api.nvim_buf_get_lines(_G.ctx.session.bufnr, 0, -1, false),
+                vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false),
                 "before the drop"
             )]]))
 
@@ -210,7 +210,7 @@ describe("daemon smoke", function()
             })
         ]])
         assert.is_true(wait_for([[vim.tbl_contains(
-                vim.api.nvim_buf_get_lines(_G.ctx.session.bufnr, 0, -1, false),
+                vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false),
                 "after the drop"
             )]]))
     end)

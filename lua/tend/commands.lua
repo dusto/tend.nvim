@@ -21,6 +21,7 @@ local M = {}
 --- @class tend.commands.Session
 --- @field session_id string
 --- @field stream_id string
+--- @field workspace_id string
 --- @field bufnr integer transcript buffer
 --- @field view tend.transcript.View
 
@@ -31,7 +32,8 @@ local M = {}
 --- @field provider_id? string
 --- @field persona_id? string
 --- @field persona? tend.persona.Persona
---- @field session? tend.commands.Session
+--- @field sessions table<string, tend.commands.Session> locally-tracked sessions by id
+--- @field active? string the focused session id; :TendChat/:TendEvents target it
 --- @field private providers string[]
 --- @field private assignee string
 --- @field private persona_dirs string[]
@@ -79,7 +81,8 @@ function M.setup(opts)
         provider_id = nil,
         persona_id = nil,
         persona = nil,
-        session = nil,
+        sessions = {},
+        active = nil,
     }, Context)
     if current then
         current:dispose()
@@ -146,8 +149,13 @@ function Context:register_commands()
             "delegate",
             "Start an agent session on the current task",
         },
-        { "TendChat", "chat", "Send a prompt to the current session" },
-        { "TendEvents", "events", "Open the session transcript" },
+        {
+            "TendSessions",
+            "sessions_pick",
+            "List active sessions and focus one",
+        },
+        { "TendChat", "chat", "Send a prompt to the focused session" },
+        { "TendEvents", "events", "Open the focused session's transcript" },
         { "TendApprove", "approve", "Review pending approvals" },
         {
             "TendOpenChanges",
@@ -319,11 +327,54 @@ function Context:persona_pick()
 end
 
 --- @private
---- One prompt turn on the current session; the output arrives as transcript
+--- The focused session, or nil when none is selected.
+--- @return tend.commands.Session|nil
+function Context:active_session()
+    return self.active and self.sessions[self.active] or nil
+end
+
+--- @private
+--- Ensure a session is locally tracked: create its transcript buffer/view and
+--- subscribe to its stream once. Returns the tracked session. Idempotent — a
+--- session already tracked (started here, or selected before) is returned
+--- as-is, so its transcript and cursor are preserved.
+--- @param spec { session_id: string, stream_id: string, workspace_id: string }
+--- @return tend.commands.Session
+function Context:track_session(spec)
+    local existing = self.sessions[spec.session_id]
+    if existing then
+        return existing
+    end
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    vim.bo[bufnr].bufhidden = "hide"
+    local view = TranscriptView.new(bufnr)
+    --- @type tend.commands.Session
+    local session = {
+        session_id = spec.session_id,
+        stream_id = spec.stream_id,
+        workspace_id = spec.workspace_id,
+        bufnr = bufnr,
+        view = view,
+    }
+    self.sessions[spec.session_id] = session
+    -- One stream, two consumers: the transcript renders every event and the
+    -- approval manager reacts to approval_requested/resolved.
+    self.conn.subscriber:track({
+        workspace_id = spec.workspace_id,
+        stream_id = spec.stream_id,
+        on_event = function(event)
+            view:apply(event)
+            self.conn.approvals:handle_event(event)
+        end,
+    })
+    return session
+end
+
+--- One prompt turn on the focused session; the output arrives as transcript
 --- events, so only failures are surfaced here.
 --- @param text string
 function Context:prompt_turn(text)
-    local session = self.session
+    local session = self:active_session()
     if not session then
         return
     end
@@ -337,7 +388,8 @@ function Context:prompt_turn(text)
     end)
 end
 
---- Start an agent session on the current task and send the first prompt.
+--- Start an agent session on the current task, track it, focus it, and send the
+--- first prompt. Previously-started sessions stay tracked and selectable.
 function Context:delegate()
     local ws = self:need_workspace()
     if not ws then
@@ -359,25 +411,12 @@ function Context:delegate()
         task = task.ref,
         worktree_root = ws.worktree_root,
     }, function(started)
-        local bufnr = vim.api.nvim_create_buf(false, true)
-        vim.bo[bufnr].bufhidden = "hide"
-        local view = TranscriptView.new(bufnr)
-        self.session = {
+        self:track_session({
             session_id = started.session_id,
             stream_id = started.stream_id,
-            bufnr = bufnr,
-            view = view,
-        }
-        -- One stream, two consumers: the transcript renders every event and
-        -- the approval manager reacts to approval_requested/resolved.
-        self.conn.subscriber:track({
             workspace_id = ws.workspace_id,
-            stream_id = started.stream_id,
-            on_event = function(event)
-                view:apply(event)
-                self.conn.approvals:handle_event(event)
-            end,
         })
+        self.active = started.session_id
         vim.ui.input({ prompt = "Instruction: " }, function(text)
             if text and text ~= "" then
                 self:prompt_turn(text)
@@ -386,10 +425,60 @@ function Context:delegate()
     end)
 end
 
---- Send a prompt turn to the current session.
+--- @private
+--- @param s table api.SessionInfo
+--- @return string
+local function session_label(s)
+    local label = s.session_id
+        .. " · "
+        .. (s.provider_id or "?")
+        .. " · "
+        .. (s.task and s.task.id or "no task")
+        .. " ["
+        .. (s.status or "?")
+        .. "]"
+    if s.pending then
+        label = label .. " ⏳" .. s.pending.kind
+    end
+    return label
+end
+
+--- List the daemon's sessions, then focus the chosen one — tracking its stream
+--- (transcript) if not already followed — so :TendChat / :TendEvents target it.
+function Context:sessions_pick()
+    local ws = self.workspace
+    local params = ws and { workspace_id = ws.workspace_id } or {}
+    self:call("session.list", params, function(result)
+        local list = result.sessions or {}
+        if #list == 0 then
+            report("tend: no active sessions; run :TendDelegate to start one")
+            return
+        end
+        vim.ui.select(list, {
+            prompt = "Session",
+            format_item = function(s)
+                local marker = (s.session_id == self.active) and "● " or "  "
+                return marker .. session_label(s)
+            end,
+        }, function(choice)
+            if not choice then
+                return
+            end
+            self:track_session({
+                session_id = choice.session_id,
+                stream_id = choice.stream_id,
+                workspace_id = choice.task and choice.task.workspace_id or "",
+            })
+            self.active = choice.session_id
+            info("tend: focused session " .. choice.session_id)
+        end)
+    end)
+end
+
+--- Send a prompt turn to the focused session.
 function Context:chat()
-    if not self.session then
-        report("tend: no session; run :TendDelegate first")
+    if not self:active_session() then
+        report("tend: no focused session; run :TendDelegate or :TendSessions")
         return
     end
     vim.ui.input({ prompt = "Prompt: " }, function(text)
@@ -399,11 +488,11 @@ function Context:chat()
     end)
 end
 
---- Open the current session's transcript in a split.
+--- Open the focused session's transcript in a split.
 function Context:events()
-    local session = self.session
+    local session = self:active_session()
     if not session then
-        report("tend: no session; run :TendDelegate first")
+        report("tend: no focused session; run :TendDelegate or :TendSessions")
         return
     end
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do

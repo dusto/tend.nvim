@@ -10,11 +10,17 @@ describe("tend.commands", function()
     before_each(function()
         child.setup()
         child.lua([[
-            -- Scripted UI: tests set _G.ui_choice (index) and _G.ui_input.
+            -- Scripted UI: tests set _G.ui_choice (one index) or _G.ui_choices
+            -- (a queue of indices, consumed in order across sequential selects),
+            -- and _G.ui_input.
             vim.ui.select = function(items, _, on_choice)
                 _G.ui_items = items
-                if _G.ui_choice then
-                    on_choice(items[_G.ui_choice], _G.ui_choice)
+                local idx = _G.ui_choice
+                if _G.ui_choices and #_G.ui_choices > 0 then
+                    idx = table.remove(_G.ui_choices, 1)
+                end
+                if idx then
+                    on_choice(items[idx], idx)
                 else
                     on_choice(nil, nil)
                 end
@@ -142,6 +148,7 @@ describe("tend.commands", function()
             "TendProvider",
             "TendPersona",
             "TendDelegate",
+            "TendDelegateTo",
             "TendSessions",
             "TendChat",
             "TendEvents",
@@ -508,6 +515,82 @@ describe("tend.commands", function()
             child.lua_get("#_G.conn.subscriber.tracked")
         )
     end)
+
+    it("TendDelegateTo routes a picked task to a chosen session", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["task.list"] = {
+                result = {
+                    tasks = {
+                        {
+                            ref = { provider = "beads", workspace_id = "ws-1", id = "t-7" },
+                            title = "fix it",
+                            status = "open",
+                            description = "the details",
+                        },
+                    },
+                },
+            }
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-9",
+                            provider_id = "codex",
+                            stream_id = "str-9",
+                            status = "idle",
+                            task = { workspace_id = "ws-1", id = "t-2" },
+                        },
+                    },
+                },
+            }
+            _G.ui_choices = { 1, 1 } -- task #1, then session #1
+            vim.cmd("TendDelegateTo")
+        ]])
+        local sent = calls()
+        assert.equal("task.list", sent[1].method)
+        assert.equal("session.list", sent[2].method)
+        -- The task is handed to the EXISTING session via agent.prompt, not a
+        -- fresh agent.start.
+        assert.equal("agent.prompt", sent[3].method)
+        assert.equal("ses-9", sent[3].params.session_id)
+        assert.is_not_nil(sent[3].params.text:find("t-7", 1, true))
+        assert.is_not_nil(sent[3].params.text:find("the details", 1, true))
+        for _, c in ipairs(sent) do
+            assert.is_not.equal("agent.start", c.method)
+        end
+        -- The chosen session is focused for follow-up chat.
+        assert.equal("ses-9", child.lua_get("_G.ctx.active"))
+        assert.equal("t-7", child.lua_get("_G.ctx.task.ref.id"))
+    end)
+
+    it(
+        "TendDelegateTo reports when there are no sessions to route to",
+        function()
+            child.lua([[
+            _G.give_workspace()
+            _G.replies["task.list"] = {
+                result = {
+                    tasks = {
+                        { ref = { provider = "beads", workspace_id = "ws-1", id = "t-1" }, title = "x", status = "open" },
+                    },
+                },
+            }
+            _G.replies["session.list"] = { result = { sessions = {} } }
+            _G.ui_choices = { 1 }
+            vim.cmd("TendDelegateTo")
+        ]])
+            local sent = calls()
+            -- Task picked and sessions listed, but nothing routed.
+            assert.equal("session.list", sent[#sent].method)
+            for _, c in ipairs(sent) do
+                assert.is_not.equal("agent.prompt", c.method)
+            end
+            assert.is_not_nil(
+                last_notice().msg:find("no active sessions", 1, true)
+            )
+        end
+    )
 
     it("setup stops the previous context's connection", function()
         child.lua([[

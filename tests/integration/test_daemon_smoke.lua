@@ -182,10 +182,10 @@ describe("daemon smoke", function()
                 payload = { text = "before the drop" },
             })
         ]])
-        assert.is_true(wait_for([[vim.tbl_contains(
+        assert.is_true(wait_for([[table.concat(
                 vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false),
-                "before the drop"
-            )]]))
+                "\n"
+            ):find("before the drop", 1, true) ~= nil]]))
 
         child.lua([[_G.daemon:drop()]])
         -- The same identity re-registers and the tracked session stream is
@@ -210,9 +210,9 @@ describe("daemon smoke", function()
                 payload = { text = "after the drop" },
             })
         ]])
-        assert.is_true(wait_for([[vim.tbl_contains(
+        assert.is_true(wait_for([[table.concat(
                 vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false),
-                "after the drop"
-            )]]))
+                "\n"
+            ):find("after the drop", 1, true) ~= nil]]))
     end)
 end)

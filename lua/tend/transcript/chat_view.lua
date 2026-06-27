@@ -16,7 +16,7 @@ local MessageWriter = require("tend.ui.message_writer")
 --- @class tend.transcript.ChatView
 --- @field private writer tend.ui.MessageWriter
 --- @field private bufnr integer
---- @field private seen table<integer, boolean> seqs already applied (dedup)
+--- @field private seen table<string, boolean> "kind:seq" keys already applied
 local ChatView = {}
 ChatView.__index = ChatView
 
@@ -45,14 +45,17 @@ end
 --- Apply one daemon event envelope, rendering it into the chat buffer.
 --- @param event table
 function ChatView:apply(event)
-    -- Dedup by seq: each record renders exactly once, so a replayed record on
-    -- reconnect does not double-append to the streaming writer.
+    -- Dedup so a replayed record on reconnect does not double-append to the
+    -- streaming writer. Key on kind + seq, not seq alone: a summary for a range
+    -- [from, n] can carry a seq already used by a raw event, so seq-only dedup
+    -- would drop the summary as a false duplicate.
     local seq = event.seq
     if seq ~= nil then
-        if self.seen[seq] then
+        local key = tostring(event.kind or "event") .. ":" .. tostring(seq)
+        if self.seen[key] then
             return
         end
-        self.seen[seq] = true
+        self.seen[key] = true
     end
 
     if event.kind == "summary" then

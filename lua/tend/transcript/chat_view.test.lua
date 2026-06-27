@@ -112,4 +112,22 @@ describe("tend.transcript.ChatView", function()
         assert.is_not_nil(body:find("summarized turns 1-4", 1, true))
         assert.is_not_nil(body:find("did some work", 1, true))
     end)
+
+    it(
+        "renders a summary sharing a seq with an already-rendered event",
+        function()
+            -- The contract lets a summary for [1, n] carry a seq already used by a
+            -- raw event; dedup must not drop it (kind + seq, not seq alone).
+            view:apply(event(1, "agent_message_chunk", { text = "first turn" }))
+            view:apply({
+                kind = "summary",
+                seq = 1,
+                summary = { from_seq = 1, to_seq = 3 },
+                payload = { text = "summary of it" },
+            })
+            local body = text()
+            assert.is_not_nil(body:find("first turn", 1, true))
+            assert.is_not_nil(body:find("summarized turns 1-3", 1, true))
+        end
+    )
 end)

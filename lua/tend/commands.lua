@@ -6,15 +6,16 @@
 --- client). Commands resolve their inputs via vim.ui.select/vim.ui.input and
 --- report failures through the logger, never silently.
 ---
---- Wired here, sessions fan their event stream out to both the transcript view
---- and the approval manager, so a delegated agent's output and its approval
---- prompts stay in sync. :TendOpenChanges/:TendDiff drive the daemon's
---- diff-review surface (file.diff) and the local diff renderer.
+--- Wired here, sessions fan their event stream out to both the chat view (the
+--- rich ChatView, rendering messages and tool-call blocks) and the approval
+--- manager, so a delegated agent's output and its approval prompts stay in
+--- sync. :TendOpenChanges/:TendDiff drive the daemon's diff-review surface
+--- (file.diff) and the local diff renderer.
+local ChatView = require("tend.transcript.chat_view")
 local Connection = require("tend.daemon.connection")
 local DiffReview = require("tend.ui.diff_review")
 local Discovery = require("tend.persona.discovery")
 local Logger = require("tend.utils.logger")
-local TranscriptView = require("tend.transcript.view")
 
 local M = {}
 
@@ -23,7 +24,7 @@ local M = {}
 --- @field stream_id string
 --- @field workspace_id string
 --- @field bufnr integer transcript buffer
---- @field view tend.transcript.View
+--- @field view tend.transcript.ChatView
 
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
@@ -381,11 +382,11 @@ function Context:active_session()
 end
 
 --- @private
---- Ensure a session is locally tracked: create its transcript buffer/view and
+--- Ensure a session is locally tracked: create its chat buffer/view and
 --- subscribe to its stream once. Returns the tracked session. Idempotent — a
 --- session already tracked (started here, or selected before) is returned
 --- as-is, so its transcript and cursor are preserved.
---- @param spec { session_id: string, stream_id: string, workspace_id: string }
+--- @param spec { session_id: string, stream_id: string, workspace_id: string, provider_id?: string }
 --- @return tend.commands.Session
 function Context:track_session(spec)
     local existing = self.sessions[spec.session_id]
@@ -394,7 +395,7 @@ function Context:track_session(spec)
     end
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.bo[bufnr].bufhidden = "hide"
-    local view = TranscriptView.new(bufnr)
+    local view = ChatView.new(bufnr, { provider_id = spec.provider_id })
     --- @type tend.commands.Session
     local session = {
         session_id = spec.session_id,
@@ -461,6 +462,7 @@ function Context:start_session(provider, task, cb)
             session_id = started.session_id,
             stream_id = started.stream_id,
             workspace_id = ws.workspace_id,
+            provider_id = provider,
         })
         self.active = started.session_id
         cb(session)
@@ -532,6 +534,7 @@ function Context:focus_session(s)
     local session = self:track_session({
         session_id = s.session_id,
         stream_id = s.stream_id,
+        provider_id = s.provider_id,
         -- The daemon reports a session's workspace independent of its task, so a
         -- task-less session still carries one; fall back to the task's for an
         -- older daemon.

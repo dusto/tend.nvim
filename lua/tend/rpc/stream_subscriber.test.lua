@@ -172,6 +172,54 @@ describe("tend.rpc.stream_subscriber delivery", function()
         assert.equal(sub:cursor("ws", "session:s1"), 2)
     end)
 
+    it("delivers a summary sharing a seq with an already-seen event", function()
+        local sub = StreamSubscriber.new()
+        local got = {}
+        sub:track({
+            workspace_id = "ws",
+            stream_id = "session:s1",
+            on_event = function(e)
+                table.insert(got, e.kind or e.type)
+            end,
+        })
+        local c = fake_client()
+        sub:bootstrap(c, "e1")
+        -- A raw event at seq 1 advances the cursor; a summary for [1,3] also
+        -- carries seq 1. The cursor check would drop it, but kind-aware dedup
+        -- must deliver it (records are distinct by stream_id + seq + kind).
+        c:push(ev("session:s1", 1))
+        c:push({
+            stream_id = "session:s1",
+            seq = 1,
+            cursor_seq = 3,
+            kind = "summary",
+        })
+        assert.same(got, { "agent_message_chunk", "summary" })
+    end)
+
+    it("dedups a replayed summary record", function()
+        local sub = StreamSubscriber.new()
+        local count = 0
+        sub:track({
+            workspace_id = "ws",
+            stream_id = "session:s1",
+            on_event = function()
+                count = count + 1
+            end,
+        })
+        local c = fake_client()
+        sub:bootstrap(c, "e1")
+        local summary = {
+            stream_id = "session:s1",
+            seq = 1,
+            cursor_seq = 3,
+            kind = "summary",
+        }
+        c:push(summary)
+        c:push(summary) -- replay on reconnect
+        assert.equal(count, 1)
+    end)
+
     it("advances the cursor to cursor_seq for a summary record", function()
         local sub = StreamSubscriber.new()
         sub:track({
@@ -181,8 +229,13 @@ describe("tend.rpc.stream_subscriber delivery", function()
         })
         local c = fake_client()
         sub:bootstrap(c, "e1")
-        -- A summary collapses [1,10]: seq=from, cursor_seq=to.
-        c:push(ev("session:s1", 1, 10))
+        -- A summary collapses [1,10]: seq=from, cursor_seq=to, kind=summary.
+        c:push({
+            stream_id = "session:s1",
+            seq = 1,
+            cursor_seq = 10,
+            kind = "summary",
+        })
         assert.equal(sub:cursor("ws", "session:s1"), 10)
         -- The next raw record continues after the range.
         local seen = false

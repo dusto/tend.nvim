@@ -453,10 +453,14 @@ describe("tend.commands", function()
                 payload = { text = "hello there" },
             })
         ]])
-        local lines = child.lua_get(
-            "vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false)"
-        )
-        assert.same({ "hello there" }, lines)
+        -- The rich ChatView renders the chunk (under an agent header), so the
+        -- text appears among the buffer's lines rather than as the only line.
+        local rendered = child.lua_get([[(function()
+            local lines = vim.api.nvim_buf_get_lines(
+                _G.ctx:active_session().bufnr, 0, -1, false)
+            return table.concat(lines, "\n"):find("hello there", 1, true) ~= nil
+        end)()]])
+        assert.is_true(rendered)
         assert.equal(
             "agent_message_chunk",
             child.lua_get("_G.conn.approvals.events[1].type")

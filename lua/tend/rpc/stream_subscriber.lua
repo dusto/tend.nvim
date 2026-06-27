@@ -37,10 +37,19 @@ M.ERR_CURSOR_COMPACTED = 1001
 --- @field private cursors tend.rpc.CursorStore
 --- @field private client tend.rpc.Client? current connection, nil while down
 --- @field private streams table<string, tend.rpc.TrackedStream> by stream_id
+--- @field private summaries table<string, boolean> seen summary keys (dedup)
 --- @field private on_error fun(msg: string)
 local StreamSubscriber = {}
 StreamSubscriber.__index = StreamSubscriber
 M.StreamSubscriber = StreamSubscriber
+
+--- @param workspace_id string
+--- @param stream_id string
+--- @param seq integer
+--- @return string key
+local function summary_key(workspace_id, stream_id, seq)
+    return workspace_id .. "\0" .. stream_id .. "\0" .. tostring(seq)
+end
 
 --- @class tend.rpc.StreamSubscriberOpts
 --- @field cursors? tend.rpc.CursorStore Shared cursor store (default: a new one).
@@ -54,6 +63,7 @@ function StreamSubscriber.new(opts)
         cursors = opts.cursors or CursorStore.new(),
         client = nil,
         streams = {},
+        summaries = {},
         on_error = opts.on_error or function() end,
     }, StreamSubscriber)
 end
@@ -99,7 +109,12 @@ end
 --- @param daemon_epoch string
 function StreamSubscriber:bootstrap(client, daemon_epoch)
     self.client = client
-    self.cursors:set_epoch(daemon_epoch)
+    -- A new epoch invalidates stored seqs, so the summary dedup set (keyed by
+    -- seq) is meaningless against the new daemon process — drop it alongside the
+    -- cursors. A same-epoch reconnect keeps both so replays still dedup.
+    if self.cursors:set_epoch(daemon_epoch) then
+        self.summaries = {}
+    end
     client:on_notification(M.METHOD_PUSH, function(params)
         self:handle_push(params)
     end)
@@ -182,8 +197,26 @@ function StreamSubscriber:handle_push(params)
     if not stream then
         return -- not (or no longer) tracked
     end
-    -- At-least-once delivery: skip anything we have already passed.
-    if self.cursors:seen(stream.workspace_id, event.stream_id, event.seq) then
+    -- Dedup is kind-aware (the daemon contract makes records distinct by
+    -- stream_id + seq + kind). A summary for a range [from, n] carries seq =
+    -- from, which is at or below the cursor the summarized raw events already
+    -- advanced, so the forward-cursor check would wrongly drop it. Dedup
+    -- summaries by their own (stream, seq) and let raw events use the cursor.
+    local is_summary = event.kind == "summary"
+    if is_summary then
+        if
+            self.summaries[summary_key(
+                stream.workspace_id,
+                event.stream_id,
+                event.seq
+            )]
+        then
+            return
+        end
+    elseif
+        self.cursors:seen(stream.workspace_id, event.stream_id, event.seq)
+    then
+        -- At-least-once delivery: skip anything we have already passed.
         return
     end
     -- Deliver before advancing: if the listener errors, the record is not
@@ -197,6 +230,14 @@ function StreamSubscriber:handle_push(params)
                 .. tostring(err)
         )
         return
+    end
+    if is_summary then
+        self.summaries[summary_key(
+            stream.workspace_id,
+            event.stream_id,
+            event.seq
+        )] =
+            true
     end
     self.cursors:record(stream.workspace_id, event.stream_id, event.cursor_seq)
 end

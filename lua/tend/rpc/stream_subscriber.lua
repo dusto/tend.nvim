@@ -102,6 +102,23 @@ function StreamSubscriber:untrack(stream_id)
     end
 end
 
+--- Reset a stream's cursor to 0 so its next subscribe replays the full retained
+--- history from the start. Used when (re)attaching a session whose transcript
+--- should be replayed into a fresh buffer — without this, a re-attach resumes
+--- from the kept cursor and shows nothing until new events arrive. Also clears
+--- the stream's summary dedup so replayed summaries render again.
+--- @param workspace_id string
+--- @param stream_id string
+function StreamSubscriber:reset_cursor(workspace_id, stream_id)
+    self.cursors:reset(workspace_id, stream_id, 0)
+    local prefix = workspace_id .. "\0" .. stream_id .. "\0"
+    for key in pairs(self.summaries) do
+        if key:sub(1, #prefix) == prefix then
+            self.summaries[key] = nil
+        end
+    end
+end
+
 --- Bind a freshly connected client (after its daemon.hello) and (re)subscribe
 --- every tracked stream from its cursor. A daemon epoch different from the last
 --- one discards stale cursors first, so streams resume from the start.

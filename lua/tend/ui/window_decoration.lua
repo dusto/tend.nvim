@@ -241,7 +241,11 @@ function WindowDecoration._set_buffer_name(bufnr, buf_name)
 
     while collider do
         local candidate = buf_name .. "-old-" .. n
-        if not find_buf_by_name(candidate, bufnr) then
+        -- Search all buffers (do not exclude bufnr): bufnr itself may already
+        -- hold this candidate name — e.g. when several chat buffers cycle
+        -- through the shared name as the widget switches sessions — and renaming
+        -- the collider onto a name bufnr holds would raise E95.
+        if not find_buf_by_name(candidate) then
             vim.api.nvim_buf_set_name(collider, candidate)
             break
         end

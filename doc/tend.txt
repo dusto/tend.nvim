@@ -567,6 +567,7 @@ Override default keybindings via the `keymaps` config option:
           { "<S-Tab>", mode = { "i", "n", "v" } },
         },
         switch_provider = "<localLeader>s",
+        switch_session = "<localLeader>S",
         switch_model = "<localLeader>m",
         change_thought_level = "<localLeader>t",
       },
@@ -1159,6 +1160,12 @@ a task is delegated to the session (see |:TendTaskPick|).
   |:TendChat| and |:TendEvents| target it. The currently focused session
   is marked. A session started in this editor stays tracked; selecting it
   again reuses its transcript.
+
+  The same picker is reachable from inside the chat widget via the
+  `switch_session` keymap (default `<localLeader>S`, see
+  |tend-keymaps|), so you can switch which session the chat shows and
+  targets without leaving it. Each session keeps its own transcript
+  buffer, so switching is instant and preserves scrollback.
 
                                                  *:TendSessionDisconnect*
 :TendSessionDisconnect

@@ -863,6 +863,82 @@ describe("tend.ui.ChatWidget", function()
         end)
     end)
 
+    describe("session switcher keymap", function()
+        local widget
+        local tab_page_id
+
+        --- Invoke the buffer-local normal-mode keymap identified by its desc,
+        --- bypassing localleader resolution. Returns whether it was found.
+        --- @param bufnr integer
+        --- @param desc string
+        --- @return boolean
+        local function invoke_keymap(bufnr, desc)
+            for _, km in ipairs(vim.api.nvim_buf_get_keymap(bufnr, "n")) do
+                if km.desc == desc and km.callback then
+                    km.callback()
+                    return true
+                end
+            end
+            return false
+        end
+
+        after_each(function()
+            if widget then
+                pcall(function()
+                    widget:destroy()
+                end)
+                widget = nil
+            end
+            pcall(function()
+                vim.cmd("tabclose")
+            end)
+        end)
+
+        it(
+            "fires on_switch_session from the chat, input, and per-session buffers",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                local switched = 0
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]],
+                    function()
+                        switched = switched + 1
+                    end
+                )
+
+                local desc = "Tend: Switch session"
+                assert.is_true(invoke_keymap(widget.buf_nrs.chat, desc))
+                assert.is_true(invoke_keymap(widget.buf_nrs.input, desc))
+                -- Per-session chat buffers (created for the daemon path) get the
+                -- same switch keymap via bind_chat_keymaps.
+                local other = widget:create_chat_buffer()
+                assert.is_true(invoke_keymap(other, desc))
+
+                assert.equal(3, switched)
+            end
+        )
+
+        it(
+            "binds no switch keymap when no on_switch_session is given",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]]
+                )
+
+                assert.is_false(
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Switch session")
+                )
+            end
+        )
+    end)
+
     describe("hidden chat window lifecycle", function()
         local widget
         local tab_page_id

@@ -27,7 +27,8 @@ local M = {}
 --- @field bufnr integer per-session chat buffer (created via the widget)
 --- @field view tend.transcript.ChatView
 
---- @alias tend.commands.WidgetFactory fun(on_submit: fun(prompt: string): boolean): tend.ui.ChatWidget
+--- @alias tend.commands.SubmitInput fun(prompt: string): boolean
+--- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun()): tend.ui.ChatWidget
 
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
@@ -91,8 +92,12 @@ function M.setup(opts)
         sessions = {},
         active = nil,
         widget = nil,
-        widget_factory = opts.widget_factory or function(on_submit)
-            return ChatWidget:new(vim.api.nvim_get_current_tabpage(), on_submit)
+        widget_factory = opts.widget_factory or function(on_submit, on_switch)
+            return ChatWidget:new(
+                vim.api.nvim_get_current_tabpage(),
+                on_submit,
+                on_switch
+            )
         end,
     }, Context)
     if current then
@@ -155,6 +160,8 @@ function Context:ensure_widget()
     if not self.widget then
         self.widget = self.widget_factory(function(prompt)
             return self:submit_prompt(prompt)
+        end, function()
+            self:switch_session()
         end)
     end
     return self.widget
@@ -613,9 +620,13 @@ function Context:focus_session(s)
     return session
 end
 
---- List the daemon's sessions, then focus the chosen one — tracking its stream
---- (transcript) if not already followed — so :TendChat / :TendEvents target it.
-function Context:session_attach()
+--- List the daemon's sessions and focus the chosen one — tracking its stream
+--- (transcript) if not already followed, then pointing the chat widget at it so
+--- :TendChat / :TendEvents and the input target it. The picker marks the active
+--- session and shows each one's status/task. Shared by |:TendSessionAttach| and
+--- the in-chat switch keymap, so switching works from inside the chat without
+--- leaving it.
+function Context:switch_session()
     self:with_sessions(function(list)
         vim.ui.select(list, {
             prompt = "Session",
@@ -632,6 +643,12 @@ function Context:session_attach()
             info("tend: focused session " .. choice.session_id)
         end)
     end)
+end
+
+--- List the daemon's sessions, then focus the chosen one. The :TendSessionAttach
+--- entry point for the session switcher (see |Context:switch_session|).
+function Context:session_attach()
+    self:switch_session()
 end
 
 --- @private

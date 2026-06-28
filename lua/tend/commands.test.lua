@@ -93,9 +93,10 @@ describe("tend.commands", function()
             -- window machinery stubbed. Captures the submit callback so a test
             -- can simulate the user pressing <CR> in the input.
             _G.widget = nil
-            _G.make_widget = function(on_submit)
+            _G.make_widget = function(on_submit, on_switch)
                 local w = {
                     on_submit = on_submit,
+                    on_switch = on_switch,
                     buf_nrs = { chat = -1 },
                     shows = {},
                     hides = 0,
@@ -720,6 +721,40 @@ describe("tend.commands", function()
             -- An open widget keeps its old buffer on a bare re-show, so switching
             -- must hide() first; the widget then re-shows on ses-2's buffer.
             assert.is_true(child.lua_get("_G.widget.hides >= 1"))
+            assert.is_true(
+                child.lua_get(
+                    "_G.widget.buf_nrs.chat == _G.ctx.sessions['ses-2'].bufnr"
+                )
+            )
+        end
+    )
+
+    it(
+        "the in-chat switcher (on_switch) switches the focused session",
+        function()
+            child.lua([[
+            _G.give_session() -- ses-1 focused + open
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-2",
+                            provider_id = "codex",
+                            stream_id = "str-2",
+                            status = "running",
+                            workspace_id = "ws-1",
+                        },
+                    },
+                },
+            }
+            _G.ui_choice = 1
+            -- The chat-buffer switch keymap fires the widget's on_switch
+            -- callback, which opens the session picker without leaving the chat.
+            _G.widget.on_switch()
+        ]])
+            -- The chosen session becomes active and the chat window follows it
+            -- (its per-session transcript buffer is now the shown chat buffer).
+            assert.equal("ses-2", child.lua_get("_G.ctx.active"))
             assert.is_true(
                 child.lua_get(
                     "_G.widget.buf_nrs.chat == _G.ctx.sessions['ses-2'].bufnr"

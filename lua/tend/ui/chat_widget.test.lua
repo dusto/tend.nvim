@@ -136,6 +136,52 @@ describe("tend.ui.ChatWidget", function()
                 assert.is_true(vim.api.nvim_win_is_valid(widget.win_nrs.chat))
             end)
 
+            it(
+                "create_chat_buffer + hide/show swaps the chat window's buffer",
+                function()
+                    -- The daemon path renders one chat buffer per session and
+                    -- swaps which the widget shows. A bare re-show keeps the old
+                    -- buffer (WidgetLayout reuses the existing window), so the
+                    -- swap must hide() first; this is the mechanism behind
+                    -- Context:show_session.
+                    widget:show()
+                    assert.equal(
+                        widget.buf_nrs.chat,
+                        vim.api.nvim_win_get_buf(widget.win_nrs.chat)
+                    )
+
+                    local other = widget:create_chat_buffer()
+                    assert.is_true(vim.api.nvim_buf_is_valid(other))
+
+                    widget:hide()
+                    widget.buf_nrs.chat = other
+                    widget:show()
+
+                    assert.equal(
+                        other,
+                        vim.api.nvim_win_get_buf(widget.win_nrs.chat)
+                    )
+                end
+            )
+
+            it("destroy() deletes every chat buffer it created", function()
+                local original_chat = widget.buf_nrs.chat
+                local a = widget:create_chat_buffer()
+                local b = widget:create_chat_buffer()
+                -- Simulate the daemon path swapping the active chat buffer, so
+                -- the original is no longer in buf_nrs.
+                widget.buf_nrs.chat = a
+
+                widget:destroy()
+
+                -- All chat buffers are gone, not just the active one — no leak
+                -- of the original or the non-active session buffers.
+                assert.is_false(vim.api.nvim_buf_is_valid(original_chat))
+                assert.is_false(vim.api.nvim_buf_is_valid(a))
+                assert.is_false(vim.api.nvim_buf_is_valid(b))
+                widget = nil
+            end)
+
             it("windows are created in correct tabpage", function()
                 widget:show()
 

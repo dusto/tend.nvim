@@ -29,8 +29,11 @@ ChatView.__index = ChatView
 function ChatView.new(bufnr, opts)
     opts = opts or {}
     -- Markdown so the writer's headers, code fences, and diffs render with
-    -- treesitter highlighting like the upstream chat buffer.
-    vim.bo[bufnr].filetype = "markdown"
+    -- treesitter highlighting. Skip when the buffer already has a filetype (the
+    -- chat widget creates its session buffers as "TendChat").
+    if vim.bo[bufnr].filetype == "" then
+        vim.bo[bufnr].filetype = "markdown"
+    end
     local writer = MessageWriter:new(bufnr)
     if opts.provider_id then
         writer:set_provider_name(opts.provider_id)

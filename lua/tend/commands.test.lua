@@ -84,11 +84,47 @@ describe("tend.commands", function()
                 end,
             }
 
+            -- A fake chat widget: real scratch chat buffers (so ChatView
+            -- renders into them and tests can read the transcript), with the
+            -- window machinery stubbed. Captures the submit callback so a test
+            -- can simulate the user pressing <CR> in the input.
+            _G.widget = nil
+            _G.make_widget = function(on_submit)
+                local w = {
+                    on_submit = on_submit,
+                    buf_nrs = { chat = -1 },
+                    shows = {},
+                    hides = 0,
+                    destroys = 0,
+                    _open = false,
+                }
+                function w:create_chat_buffer()
+                    return vim.api.nvim_create_buf(false, true)
+                end
+                function w:is_open()
+                    return self._open
+                end
+                function w:show(opts)
+                    self._open = true
+                    table.insert(self.shows, opts or {})
+                end
+                function w:hide()
+                    self._open = false
+                    self.hides = self.hides + 1
+                end
+                function w:destroy()
+                    self.destroys = self.destroys + 1
+                end
+                _G.widget = w
+                return w
+            end
+
             _G.ctx = require("tend.commands").setup({
                 connection = _G.conn,
                 providers = { "codex", "claude" },
                 assignee = "dustin",
                 persona_dirs = { "/tmp/tend-test-personas" },
+                widget_factory = _G.make_widget,
             })
 
             -- Common fixtures.
@@ -467,13 +503,36 @@ describe("tend.commands", function()
         )
     end)
 
-    it("TendChat prompts the current session", function()
+    it(
+        "TendChat opens the widget on the focused session, input focused",
+        function()
+            child.lua([[
+            _G.give_session()
+            _G.widget.shows = {}
+            vim.cmd("TendChat")
+        ]])
+            -- The widget is shown on the active session's buffer with the prompt
+            -- focused (no more vim.ui.input prompt box).
+            assert.is_true(child.lua_get("#_G.widget.shows >= 1"))
+            assert.is_true(
+                child.lua_get("_G.widget.shows[#_G.widget.shows].focus_prompt")
+            )
+            assert.is_true(
+                child.lua_get(
+                    "_G.widget.buf_nrs.chat == _G.ctx:active_session().bufnr"
+                )
+            )
+        end
+    )
+
+    it("the chat input submits a prompt to the focused session", function()
         child.lua([[
             _G.give_session()
             _G.calls = {}
-            _G.ui_input = "and then?"
-            vim.cmd("TendChat")
+            -- Simulate the user typing in the input and pressing submit.
+            _G.accepted = _G.widget.on_submit("and then?")
         ]])
+        assert.is_true(child.lua_get("_G.accepted"))
         local sent = calls()
         assert.equal("agent.prompt", sent[1].method)
         assert.same(
@@ -482,27 +541,39 @@ describe("tend.commands", function()
         )
     end)
 
+    it("a submit with no focused session is rejected", function()
+        child.lua([[
+            _G.ctx:ensure_widget()
+            _G.accepted = _G.widget.on_submit("hi")
+        ]])
+        assert.is_false(child.lua_get("_G.accepted"))
+        assert.same({}, calls())
+    end)
+
     it("TendChat without a session reports instead of calling", function()
         child.lua([[vim.cmd("TendChat")]])
         assert.same({}, calls())
         assert.is_not_nil(last_notice().msg:find("TendSessionNew", 1, true))
     end)
 
-    it("TendEvents opens the transcript buffer in a window", function()
+    it("TendEvents shows the widget on the focused session", function()
         child.lua([[
             _G.give_session()
+            _G.widget.shows = {}
             vim.cmd("TendEvents")
         ]])
-        local shown = child.lua([[
-            local bufnr = _G.ctx:active_session().bufnr
-            for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-                if vim.api.nvim_win_get_buf(win) == bufnr then
-                    return true
-                end
-            end
-            return false
-        ]])
-        assert.is_true(shown)
+        assert.is_true(child.lua_get("#_G.widget.shows >= 1"))
+        -- Reading, not composing: the prompt is not focused.
+        assert.is_false(
+            child.lua_get(
+                "_G.widget.shows[#_G.widget.shows].focus_prompt == true"
+            )
+        )
+        assert.is_true(
+            child.lua_get(
+                "_G.widget.buf_nrs.chat == _G.ctx:active_session().bufnr"
+            )
+        )
     end)
 
     it("TendSessionAttach lists sessions and focuses the chosen one", function()
@@ -585,13 +656,45 @@ describe("tend.commands", function()
 
         child.lua([[
             _G.calls = {}
-            _G.ui_input = "to two"
-            vim.cmd("TendChat")
+            _G.widget.on_submit("to two")
         ]])
         local sent = calls()
         assert.equal("agent.prompt", sent[1].method)
         assert.same({ session_id = "ses-2", text = "to two" }, sent[1].params)
     end)
+
+    it(
+        "switching sessions while open reopens the widget on the new buffer",
+        function()
+            child.lua([[
+            _G.give_session() -- ses-1 shown (widget open)
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-2",
+                            provider_id = "codex",
+                            stream_id = "str-2",
+                            status = "idle",
+                            workspace_id = "ws-1",
+                        },
+                    },
+                },
+            }
+            _G.widget.hides = 0
+            _G.ui_choice = 1
+            vim.cmd("TendSessionAttach")
+        ]])
+            -- An open widget keeps its old buffer on a bare re-show, so switching
+            -- must hide() first; the widget then re-shows on ses-2's buffer.
+            assert.is_true(child.lua_get("_G.widget.hides >= 1"))
+            assert.is_true(
+                child.lua_get(
+                    "_G.widget.buf_nrs.chat == _G.ctx.sessions['ses-2'].bufnr"
+                )
+            )
+        end
+    )
 
     it("re-selecting a tracked session reuses its transcript", function()
         child.lua([[

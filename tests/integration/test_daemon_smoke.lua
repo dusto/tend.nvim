@@ -32,6 +32,22 @@ describe("daemon smoke", function()
                 },
             })
             _G.ctx = require("tend.commands").current()
+            -- This smoke test exercises the real socket/daemon path, not the
+            -- chat window machinery; inject a fake widget (real scratch chat
+            -- buffers, stubbed windows) so transcript assertions hold without
+            -- opening real widget windows headlessly.
+            _G.widget = nil
+            _G.ctx.widget_factory = function(on_submit)
+                local w = { on_submit = on_submit, buf_nrs = { chat = -1 } }
+                function w:create_chat_buffer()
+                    return vim.api.nvim_create_buf(false, true)
+                end
+                function w:show() end
+                function w:hide() end
+                function w:destroy() end
+                _G.widget = w
+                return w
+            end
             -- A second of real reconnect delay is daemon-outage UX, not test
             -- pace; tighten it so the reconnect scenario observes quickly.
             _G.ctx.conn.reconnect_delay_ms = 100
@@ -64,13 +80,13 @@ describe("daemon smoke", function()
     end
 
     --- Start a task-less session (provider picked = the first, codex) and send
-    --- it the given prompt turn.
+    --- it the given prompt turn via the chat input (the widget's submit
+    --- callback).
     --- @param instruction string
     local function start_session(instruction)
         child.cmd("TendSessionNew")
         assert.is_true(wait_for("_G.ctx:active_session() ~= nil"))
-        child.lua(string.format([[_G.ui_input = %q]], instruction))
-        child.cmd("TendChat")
+        child.lua(string.format([[_G.widget.on_submit(%q)]], instruction))
     end
 
     --- @param expr string an expression yielding a params table in the child

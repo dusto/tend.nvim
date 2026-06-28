@@ -45,6 +45,7 @@ local WidgetLayout = require("tend.ui.widget_layout")
 --- @field _closing? boolean True during programmatic window closes
 --- @field _avoid_auto_close_cmd fun(self: tend.ui.ChatWidget, fn: fun())
 --- @field _hidden_chat_winid? integer
+--- @field _chat_buffers integer[] every chat buffer created (deleted on destroy)
 local ChatWidget = {}
 ChatWidget.__index = ChatWidget
 
@@ -249,6 +250,14 @@ function ChatWidget:destroy()
             )
         end
     end
+
+    -- Delete every chat buffer the widget created (the original plus each
+    -- per-session buffer). The active one was just deleted via buf_nrs.chat;
+    -- pcall absorbs that overlap.
+    for _, bufnr in ipairs(self._chat_buffers) do
+        pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+    self._chat_buffers = {}
 end
 
 function ChatWidget:_submit_input()
@@ -316,6 +325,11 @@ end
 
 function ChatWidget:_initialize()
     self.buf_nrs = self:_create_buf_nrs()
+    -- Track every chat buffer the widget owns so destroy() cleans them all. The
+    -- daemon path swaps buf_nrs.chat per session (create_chat_buffer), so the
+    -- original and each session buffer must be tracked here rather than relying
+    -- on buf_nrs, which only holds the currently active one.
+    self._chat_buffers = { self.buf_nrs.chat }
 
     self._hidden_chat_winid =
         WidgetLayout.open_hidden_chat_window(self.buf_nrs.chat)
@@ -437,7 +451,38 @@ function ChatWidget:_bind_keymaps()
     end
 
     DiffPreview.setup_diff_navigation_keymaps(self.buf_nrs)
-    ChatNavigation.setup_keymaps(self.buf_nrs.chat)
+    self:bind_chat_keymaps(self.buf_nrs.chat)
+end
+
+--- Bind the chat-buffer keymaps (close, jump-to-input, transcript navigation)
+--- to an arbitrary chat buffer. The daemon path renders one chat buffer per
+--- session and swaps which one the chat window shows, so each session buffer
+--- needs the same keymaps as the widget's own chat buffer.
+--- @param bufnr integer
+function ChatWidget:bind_chat_keymaps(bufnr)
+    BufHelpers.multi_keymap_set(Config.keymaps.widget.close, bufnr, function()
+        self:hide()
+    end, { desc = "Tend: Close Chat widget" })
+    for _, key in ipairs({ "a", "A", "o", "O", "i", "I", "c", "C", "x", "X" }) do
+        BufHelpers.keymap_set(bufnr, "n", key, function()
+            self:move_cursor_to(
+                self.win_nrs.input,
+                BufHelpers.start_insert_on_last_char
+            )
+        end)
+    end
+    ChatNavigation.setup_keymaps(bufnr)
+end
+
+--- Create a chat buffer set up like the widget's own (TendChat filetype, chat
+--- keymaps), for a caller that renders one transcript per session and points
+--- the chat window at the active session's buffer via buf_nrs.chat.
+--- @return integer bufnr
+function ChatWidget:create_chat_buffer()
+    local bufnr = self:_create_new_buf({ filetype = "TendChat" })
+    self:bind_chat_keymaps(bufnr)
+    table.insert(self._chat_buffers, bufnr)
+    return bufnr
 end
 
 --- @return tend.ui.ChatWidget.BufNrs

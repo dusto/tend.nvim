@@ -12,6 +12,7 @@
 --- sync. :TendOpenChanges/:TendDiff drive the daemon's diff-review surface
 --- (file.diff) and the local diff renderer.
 local ChatView = require("tend.transcript.chat_view")
+local ChatWidget = require("tend.ui.chat_widget")
 local Connection = require("tend.daemon.connection")
 local DiffReview = require("tend.ui.diff_review")
 local Discovery = require("tend.persona.discovery")
@@ -23,8 +24,10 @@ local M = {}
 --- @field session_id string
 --- @field stream_id string
 --- @field workspace_id string
---- @field bufnr integer transcript buffer
+--- @field bufnr integer per-session chat buffer (created via the widget)
 --- @field view tend.transcript.ChatView
+
+--- @alias tend.commands.WidgetFactory fun(on_submit: fun(prompt: string): boolean): tend.ui.ChatWidget
 
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
@@ -35,10 +38,12 @@ local M = {}
 --- @field persona? tend.persona.Persona
 --- @field sessions table<string, tend.commands.Session> locally-tracked sessions by id
 --- @field active? string the focused session id; :TendChat/:TendEvents target it
+--- @field widget? tend.ui.ChatWidget the one chat widget, created on first session
 --- @field private providers string[]
 --- @field private assignee string
 --- @field private persona_dirs string[]
 --- @field private persona_sources? tend.persona.Source[]
+--- @field private widget_factory tend.commands.WidgetFactory
 local Context = {}
 Context.__index = Context
 M.Context = Context
@@ -50,6 +55,7 @@ M.Context = Context
 --- @field persona_dirs? string[] Directories scanned for native personas.
 --- @field persona_sources? tend.persona.Source[] Harness agent import sources.
 --- @field connection? tend.daemon.Connection Injected connection (tests).
+--- @field widget_factory? tend.commands.WidgetFactory Injected chat widget (tests).
 
 --- The context registered by the last setup() call, or nil before setup. A
 --- connection-scoped singleton by design: the daemon owns sessions and the
@@ -84,6 +90,10 @@ function M.setup(opts)
         persona = nil,
         sessions = {},
         active = nil,
+        widget = nil,
+        widget_factory = opts.widget_factory or function(on_submit)
+            return ChatWidget:new(vim.api.nvim_get_current_tabpage(), on_submit)
+        end,
     }, Context)
     if current then
         current:dispose()
@@ -130,6 +140,57 @@ end
 --- keep its client identity registered alongside the new one.
 function Context:dispose()
     self.conn:stop()
+    if self.widget then
+        self.widget:destroy()
+        self.widget = nil
+    end
+end
+
+--- @private
+--- The one chat widget, created on first use. Its persistent input drives
+--- agent.prompt for the active session (the widget is decoupled from any
+--- runtime via its on_submit_input callback).
+--- @return tend.ui.ChatWidget
+function Context:ensure_widget()
+    if not self.widget then
+        self.widget = self.widget_factory(function(prompt)
+            return self:submit_prompt(prompt)
+        end)
+    end
+    return self.widget
+end
+
+--- @private
+--- Show the chat widget on a session: point its chat window at the session's
+--- buffer and (re)open the widget. Switching the active session is just
+--- swapping which buffer the one widget renders.
+--- @param session tend.commands.Session
+--- @param focus_prompt boolean
+function Context:show_session(session, focus_prompt)
+    local widget = self:ensure_widget()
+    -- An open widget's chat window keeps its current buffer when re-shown
+    -- (WidgetLayout reuses the existing window), so switching the active session
+    -- while open must close the windows first; show() then rebuilds them on the
+    -- new chat buffer, reapplying its window-local setup.
+    if widget.buf_nrs.chat ~= session.bufnr and widget:is_open() then
+        widget:hide()
+    end
+    widget.buf_nrs.chat = session.bufnr
+    widget:show({ focus_prompt = focus_prompt })
+end
+
+--- @private
+--- Submit a prompt from the chat input to the active session. Returns whether
+--- the input was accepted (the widget keeps the text when it is not).
+--- @param prompt string
+--- @return boolean accepted
+function Context:submit_prompt(prompt)
+    if not self:active_session() then
+        report("tend: no focused session; run :TendSessionNew")
+        return false
+    end
+    self:prompt_turn(prompt)
+    return true
 end
 
 --- Register the :Tend* user commands for this context (called by setup).
@@ -393,8 +454,10 @@ function Context:track_session(spec)
     if existing then
         return existing
     end
-    local bufnr = vim.api.nvim_create_buf(false, true)
-    vim.bo[bufnr].bufhidden = "hide"
+    -- Each session gets its own chat buffer from the one widget; the chat
+    -- window shows whichever session is active. The buffer renders even while
+    -- the widget is hidden, so a session's transcript is ready when shown.
+    local bufnr = self:ensure_widget():create_chat_buffer()
     local view = ChatView.new(bufnr, { provider_id = spec.provider_id })
     --- @type tend.commands.Session
     local session = {
@@ -480,6 +543,7 @@ function Context:session_new()
     end
     self:pick_provider(function(provider)
         self:start_session(provider, nil, function(session)
+            self:show_session(session, true)
             info(
                 "tend: started session "
                     .. session.session_id
@@ -558,7 +622,8 @@ function Context:session_attach()
             if not choice then
                 return
             end
-            self:focus_session(choice)
+            local session = self:focus_session(choice)
+            self:show_session(session, false)
             info("tend: focused session " .. choice.session_id)
         end)
     end)
@@ -599,7 +664,8 @@ function Context:deliver_task(task)
             if choice.__new then
                 self:start_session_for_task(task)
             else
-                self:focus_session(choice)
+                local session = self:focus_session(choice)
+                self:show_session(session, false)
                 self:prompt_turn(task_prompt(task))
                 info(
                     "tend: delegated "
@@ -625,6 +691,7 @@ function Context:start_session_for_task(task)
         return
     end
     self:start_session(provider, task, function(session)
+        self:show_session(session, false)
         self:prompt_turn(task_prompt(task))
         info(
             "tend: delegated "
@@ -676,27 +743,32 @@ function Context:disconnect_session(session)
     if self.active == session.session_id then
         self.active = nil
     end
+    -- If the widget is showing this session's buffer, hide it first so the
+    -- buffer is not deleted out from under the chat window.
+    if self.widget and self.widget.buf_nrs.chat == session.bufnr then
+        self.widget:hide()
+    end
     if vim.api.nvim_buf_is_valid(session.bufnr) then
         vim.api.nvim_buf_delete(session.bufnr, { force = true })
     end
 end
 
---- Send a prompt turn to the focused session.
+--- Open (or focus) the chat widget on the focused session, cursor in the input.
+--- The persistent input drives agent.prompt; replies stream into the same
+--- widget, so prompting and reading happen in one place.
 function Context:chat()
-    if not self:active_session() then
+    local session = self:active_session()
+    if not session then
         report(
             "tend: no focused session; run :TendSessionNew or :TendSessionAttach"
         )
         return
     end
-    vim.ui.input({ prompt = "Prompt: " }, function(text)
-        if text and text ~= "" then
-            self:prompt_turn(text)
-        end
-    end)
+    self:show_session(session, true)
 end
 
---- Open the focused session's transcript in a split.
+--- Open (or focus) the chat widget on the focused session, cursor in the
+--- transcript (reading rather than composing).
 function Context:events()
     local session = self:active_session()
     if not session then
@@ -705,16 +777,7 @@ function Context:events()
         )
         return
     end
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if vim.api.nvim_win_get_buf(win) == session.bufnr then
-            vim.api.nvim_set_current_win(win)
-            return
-        end
-    end
-    vim.api.nvim_open_win(session.bufnr, true, {
-        split = "right",
-        win = 0,
-    })
+    self:show_session(session, false)
 end
 
 --- @private

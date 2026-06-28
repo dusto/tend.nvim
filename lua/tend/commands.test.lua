@@ -45,11 +45,15 @@ describe("tend.commands", function()
                 subscriber = {
                     tracked = {},
                     untracked = {},
+                    resets = {},
                     track = function(self, spec)
                         table.insert(self.tracked, spec)
                     end,
                     untrack = function(self, stream_id)
                         table.insert(self.untracked, stream_id)
+                    end,
+                    reset_cursor = function(self, _, stream_id)
+                        table.insert(self.resets, stream_id)
                     end,
                 },
                 approvals = {
@@ -661,6 +665,34 @@ describe("tend.commands", function()
         local sent = calls()
         assert.equal("agent.prompt", sent[1].method)
         assert.same({ session_id = "ses-2", text = "to two" }, sent[1].params)
+    end)
+
+    it("attaching a session replays its history (resets the cursor)", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-old",
+                            provider_id = "codex",
+                            stream_id = "str-old",
+                            status = "idle",
+                            workspace_id = "ws-1",
+                        },
+                    },
+                },
+            }
+            _G.ui_choice = 1
+            vim.cmd("TendSessionAttach")
+        ]])
+        -- Attaching resets the stream cursor so the daemon replays the retained
+        -- transcript into the fresh buffer rather than resuming from the tail.
+        assert.is_true(
+            child.lua_get(
+                "vim.tbl_contains(_G.conn.subscriber.resets, 'str-old')"
+            )
+        )
     end)
 
     it(

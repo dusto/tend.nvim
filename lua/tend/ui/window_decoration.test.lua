@@ -58,6 +58,25 @@ describe("WindowDecoration._set_buffer_name", function()
         assert_buf_name(name .. "-old-1", existing)
     end)
 
+    it("skips a candidate the target itself already holds", function()
+        -- The widget cycles several chat buffers through the shared name as it
+        -- switches sessions: the target may already hold "<name>-old-1" while a
+        -- collider holds "<name>". Renaming the collider onto the target's own
+        -- name would raise E95; the search must see the target and pick old-2.
+        local name = vim.fn.tempname() .. "_target_holds"
+
+        local target = new_buf()
+        vim.api.nvim_buf_set_name(target, name .. "-old-1")
+
+        local collider = new_buf()
+        vim.api.nvim_buf_set_name(collider, name)
+
+        WindowDecoration._set_buffer_name(target, name)
+
+        assert_buf_name(name, target)
+        assert_buf_name(name .. "-old-2", collider)
+    end)
+
     it("uses <name>-old-2 when <name>-old-1 also exists", function()
         local oldest = new_buf()
         local name = vim.fn.tempname() .. "_double"

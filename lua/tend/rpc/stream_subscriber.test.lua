@@ -197,6 +197,29 @@ describe("tend.rpc.stream_subscriber delivery", function()
         assert.same(got, { "agent_message_chunk", "summary" })
     end)
 
+    it("reset_cursor makes the next subscribe replay from 0", function()
+        local sub = StreamSubscriber.new()
+        sub:track({
+            workspace_id = "ws",
+            stream_id = "session:s1",
+            on_event = function() end,
+        })
+        local c = fake_client()
+        sub:bootstrap(c, "e1")
+        c:push(ev("session:s1", 1))
+        c:push(ev("session:s1", 2))
+        assert.equal(sub:cursor("ws", "session:s1"), 2)
+
+        -- Reset, then a fresh bootstrap (re-attach) subscribes from 0 so the
+        -- daemon replays the retained history.
+        sub:reset_cursor("ws", "session:s1")
+        assert.equal(sub:cursor("ws", "session:s1"), 0)
+
+        local c2 = fake_client()
+        sub:bootstrap(c2, "e1")
+        assert.equal(c2:last_subscribe().params.last_seq, 0)
+    end)
+
     it("dedups a replayed summary record", function()
         local sub = StreamSubscriber.new()
         local count = 0

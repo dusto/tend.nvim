@@ -468,6 +468,11 @@ function Context:track_session(spec)
         view = view,
     }
     self.sessions[spec.session_id] = session
+    -- Replay the session's retained history into the fresh buffer: a session
+    -- attached (or re-attached after a disconnect) should show its prior
+    -- transcript, not start blank. For a session just started here this is a
+    -- no-op (its cursor is already at 0).
+    self.conn.subscriber:reset_cursor(spec.workspace_id, spec.stream_id)
     -- One stream, two consumers: the transcript renders every event and the
     -- approval manager reacts to approval_requested/resolved.
     self.conn.subscriber:track({

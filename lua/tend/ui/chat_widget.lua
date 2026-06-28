@@ -40,6 +40,7 @@ local WidgetLayout = require("tend.ui.widget_layout")
 --- @field win_nrs tend.ui.ChatWidget.WinNrs
 --- @field current_position tend.UserConfig.Windows.Position
 --- @field on_submit_input fun(prompt: string): boolean external callback to be called when user submits the input
+--- @field on_switch_session? fun() external callback opening the session switcher; nil disables the switch keymap
 --- @field _guard_augroup? integer BufferGuard autocmd group ID
 --- @field _winclosed_augroup? integer WinClosed autocmd group ID
 --- @field _closing? boolean True during programmatic window closes
@@ -51,13 +52,15 @@ ChatWidget.__index = ChatWidget
 
 --- @param tab_page_id integer
 --- @param on_submit_input fun(prompt: string): boolean
-function ChatWidget:new(tab_page_id, on_submit_input)
+--- @param on_switch_session fun()|nil
+function ChatWidget:new(tab_page_id, on_submit_input, on_switch_session)
     self = setmetatable({}, self)
 
     self.win_nrs = {}
     self.current_position = Config.windows.position
 
     self.on_submit_input = on_submit_input
+    self.on_switch_session = on_switch_session
     self.tab_page_id = tab_page_id
 
     self:_initialize()
@@ -423,6 +426,8 @@ function ChatWidget:_bind_keymaps()
             end,
             { desc = "Tend: Switch provider" }
         )
+
+        self:_bind_switch_session(bufnr)
     end
 
     -- Add keybindings to chat, todos, code, and files buffers to jump back to input and start insert mode
@@ -454,6 +459,25 @@ function ChatWidget:_bind_keymaps()
     self:bind_chat_keymaps(self.buf_nrs.chat)
 end
 
+--- Bind the session-switch keymap on a buffer, opening the in-chat switcher
+--- without leaving the widget. A no-op when no on_switch_session callback was
+--- given (e.g. a standalone widget with no daemon session context), so the key
+--- is only live where switching is meaningful.
+--- @param bufnr integer
+function ChatWidget:_bind_switch_session(bufnr)
+    if not self.on_switch_session then
+        return
+    end
+    BufHelpers.multi_keymap_set(
+        Config.keymaps.widget.switch_session,
+        bufnr,
+        function()
+            self.on_switch_session()
+        end,
+        { desc = "Tend: Switch session" }
+    )
+end
+
 --- Bind the chat-buffer keymaps (close, jump-to-input, transcript navigation)
 --- to an arbitrary chat buffer. The daemon path renders one chat buffer per
 --- session and swaps which one the chat window shows, so each session buffer
@@ -463,6 +487,7 @@ function ChatWidget:bind_chat_keymaps(bufnr)
     BufHelpers.multi_keymap_set(Config.keymaps.widget.close, bufnr, function()
         self:hide()
     end, { desc = "Tend: Close Chat widget" })
+    self:_bind_switch_session(bufnr)
     for _, key in ipairs({ "a", "A", "o", "O", "i", "I", "c", "C", "x", "X" }) do
         BufHelpers.keymap_set(bufnr, "n", key, function()
             self:move_cursor_to(

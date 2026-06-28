@@ -438,6 +438,7 @@ local ConfigDefault = {
                 },
             },
             switch_provider = "<localLeader>s",
+            switch_session = "<localLeader>S",
             switch_model = "<localLeader>m",
             change_thought_level = "<localLeader>t",
         },

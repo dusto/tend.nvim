@@ -168,6 +168,13 @@ end
 --- @param focus_prompt boolean
 function Context:show_session(session, focus_prompt)
     local widget = self:ensure_widget()
+    -- An open widget's chat window keeps its current buffer when re-shown
+    -- (WidgetLayout reuses the existing window), so switching the active session
+    -- while open must close the windows first; show() then rebuilds them on the
+    -- new chat buffer, reapplying its window-local setup.
+    if widget.buf_nrs.chat ~= session.bufnr and widget:is_open() then
+        widget:hide()
+    end
     widget.buf_nrs.chat = session.bufnr
     widget:show({ focus_prompt = focus_prompt })
 end

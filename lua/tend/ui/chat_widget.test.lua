@@ -136,6 +136,34 @@ describe("tend.ui.ChatWidget", function()
                 assert.is_true(vim.api.nvim_win_is_valid(widget.win_nrs.chat))
             end)
 
+            it(
+                "create_chat_buffer + hide/show swaps the chat window's buffer",
+                function()
+                    -- The daemon path renders one chat buffer per session and
+                    -- swaps which the widget shows. A bare re-show keeps the old
+                    -- buffer (WidgetLayout reuses the existing window), so the
+                    -- swap must hide() first; this is the mechanism behind
+                    -- Context:show_session.
+                    widget:show()
+                    assert.equal(
+                        widget.buf_nrs.chat,
+                        vim.api.nvim_win_get_buf(widget.win_nrs.chat)
+                    )
+
+                    local other = widget:create_chat_buffer()
+                    assert.is_true(vim.api.nvim_buf_is_valid(other))
+
+                    widget:hide()
+                    widget.buf_nrs.chat = other
+                    widget:show()
+
+                    assert.equal(
+                        other,
+                        vim.api.nvim_win_get_buf(widget.win_nrs.chat)
+                    )
+                end
+            )
+
             it("windows are created in correct tabpage", function()
                 widget:show()
 

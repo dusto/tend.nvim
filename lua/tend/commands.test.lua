@@ -96,14 +96,20 @@ describe("tend.commands", function()
                     shows = {},
                     hides = 0,
                     destroys = 0,
+                    _open = false,
                 }
                 function w:create_chat_buffer()
                     return vim.api.nvim_create_buf(false, true)
                 end
+                function w:is_open()
+                    return self._open
+                end
                 function w:show(opts)
+                    self._open = true
                     table.insert(self.shows, opts or {})
                 end
                 function w:hide()
+                    self._open = false
                     self.hides = self.hides + 1
                 end
                 function w:destroy()
@@ -656,6 +662,39 @@ describe("tend.commands", function()
         assert.equal("agent.prompt", sent[1].method)
         assert.same({ session_id = "ses-2", text = "to two" }, sent[1].params)
     end)
+
+    it(
+        "switching sessions while open reopens the widget on the new buffer",
+        function()
+            child.lua([[
+            _G.give_session() -- ses-1 shown (widget open)
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-2",
+                            provider_id = "codex",
+                            stream_id = "str-2",
+                            status = "idle",
+                            workspace_id = "ws-1",
+                        },
+                    },
+                },
+            }
+            _G.widget.hides = 0
+            _G.ui_choice = 1
+            vim.cmd("TendSessionAttach")
+        ]])
+            -- An open widget keeps its old buffer on a bare re-show, so switching
+            -- must hide() first; the widget then re-shows on ses-2's buffer.
+            assert.is_true(child.lua_get("_G.widget.hides >= 1"))
+            assert.is_true(
+                child.lua_get(
+                    "_G.widget.buf_nrs.chat == _G.ctx.sessions['ses-2'].bufnr"
+                )
+            )
+        end
+    )
 
     it("re-selecting a tracked session reuses its transcript", function()
         child.lua([[

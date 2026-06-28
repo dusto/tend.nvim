@@ -1169,13 +1169,18 @@ a task is delegated to the session (see |:TendTaskPick|).
 
                                                           *:TendChat*
 :TendChat
-  Send another prompt turn to the focused session (see
-  |:TendSessionAttach|).
+  Open (or focus) the chat widget on the focused session, cursor in the
+  prompt input. Typing and submitting drives the agent; replies stream into
+  the same window — messages, thinking blocks, and tool-call blocks — so
+  prompting and reading happen in one place. One widget is shared across
+  sessions: it shows whichever session is focused, so |:TendSessionAttach|
+  switches which conversation the widget displays. A session's approval
+  requests surface as a float resolved in place (see |:TendApprove|).
 
                                                           *:TendEvents*
 :TendEvents
-  Open the focused session's transcript in a vertical split (or focus the
-  window when already visible).
+  Open (or focus) the chat widget on the focused session with the cursor in
+  the transcript rather than the input — for reading back the conversation.
 
                                                           *:TendApprove*
 :TendApprove

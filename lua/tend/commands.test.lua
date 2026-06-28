@@ -760,6 +760,13 @@ describe("tend.commands", function()
                     "_G.widget.buf_nrs.chat == _G.ctx.sessions['ses-2'].bufnr"
                 )
             )
+            -- Switching lands in the prompt so the user can type at once; the
+            -- chat pane stays available for reading/copying.
+            assert.is_true(
+                child.lua_get(
+                    "_G.widget.shows[#_G.widget.shows].focus_prompt == true"
+                )
+            )
         end
     )
 

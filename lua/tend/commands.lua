@@ -639,7 +639,9 @@ function Context:switch_session()
                 return
             end
             local session = self:focus_session(choice)
-            self:show_session(session, false)
+            -- Land in the prompt so the user can type immediately after
+            -- switching; the chat pane stays available for reading/copying.
+            self:show_session(session, true)
             info("tend: focused session " .. choice.session_id)
         end)
     end)

@@ -164,6 +164,24 @@ describe("tend.ui.ChatWidget", function()
                 end
             )
 
+            it("destroy() deletes every chat buffer it created", function()
+                local original_chat = widget.buf_nrs.chat
+                local a = widget:create_chat_buffer()
+                local b = widget:create_chat_buffer()
+                -- Simulate the daemon path swapping the active chat buffer, so
+                -- the original is no longer in buf_nrs.
+                widget.buf_nrs.chat = a
+
+                widget:destroy()
+
+                -- All chat buffers are gone, not just the active one — no leak
+                -- of the original or the non-active session buffers.
+                assert.is_false(vim.api.nvim_buf_is_valid(original_chat))
+                assert.is_false(vim.api.nvim_buf_is_valid(a))
+                assert.is_false(vim.api.nvim_buf_is_valid(b))
+                widget = nil
+            end)
+
             it("windows are created in correct tabpage", function()
                 widget:show()
 

@@ -937,6 +937,96 @@ describe("tend.ui.ChatWidget", function()
                 )
             end
         )
+
+        it("fires the provider/model/thought controls from the chat", function()
+            vim.cmd("tabnew")
+            tab_page_id = vim.api.nvim_get_current_tabpage()
+
+            local fired = { provider = 0, model = 0, thought = 0 }
+            widget = ChatWidget:new(
+                tab_page_id,
+                spy.new(function() end) --[[@as function]],
+                nil,
+                {
+                    switch_provider = function()
+                        fired.provider = fired.provider + 1
+                    end,
+                    switch_model = function()
+                        fired.model = fired.model + 1
+                    end,
+                    change_thought_level = function()
+                        fired.thought = fired.thought + 1
+                    end,
+                }
+            )
+
+            assert.is_true(
+                invoke_keymap(widget.buf_nrs.chat, "Tend: Switch provider")
+            )
+            assert.is_true(
+                invoke_keymap(widget.buf_nrs.chat, "Tend: Switch model")
+            )
+            assert.is_true(
+                invoke_keymap(widget.buf_nrs.chat, "Tend: Change thought level")
+            )
+            assert.same({ provider = 1, model = 1, thought = 1 }, fired)
+        end)
+
+        it(
+            "leaves model/thought keymaps unbound without their controls",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                -- Only the provider control is given (the daemon offers no model
+                -- or thought choice): those keys must not be dead bindings.
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]],
+                    nil,
+                    { switch_provider = function() end }
+                )
+
+                assert.is_false(
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Switch model")
+                )
+                assert.is_false(
+                    invoke_keymap(
+                        widget.buf_nrs.chat,
+                        "Tend: Change thought level"
+                    )
+                )
+            end
+        )
+
+        it(
+            "provider keymap falls back to the legacy path without a control",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                -- A legacy widget (no controls): the provider key still works,
+                -- routed to the in-nvim path until tend-9ee.9 removes it.
+                local tend = require("tend")
+                local original = tend.switch_provider
+                local called = 0
+                tend.switch_provider = function()
+                    called = called + 1
+                end
+
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]]
+                )
+
+                local ok =
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Switch provider")
+                tend.switch_provider = original
+
+                assert.is_true(ok)
+                assert.equal(1, called)
+            end
+        )
     end)
 
     describe("hidden chat window lifecycle", function()

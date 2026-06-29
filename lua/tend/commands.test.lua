@@ -93,10 +93,11 @@ describe("tend.commands", function()
             -- window machinery stubbed. Captures the submit callback so a test
             -- can simulate the user pressing <CR> in the input.
             _G.widget = nil
-            _G.make_widget = function(on_submit, on_switch)
+            _G.make_widget = function(on_submit, on_switch, controls)
                 local w = {
                     on_submit = on_submit,
                     on_switch = on_switch,
+                    controls = controls,
                     buf_nrs = { chat = -1 },
                     shows = {},
                     hides = 0,
@@ -120,6 +121,13 @@ describe("tend.commands", function()
                 function w:destroy()
                     self.destroys = self.destroys + 1
                 end
+                w.headers = {}
+                function w:render_header(window_name, context)
+                    table.insert(
+                        self.headers,
+                        { window = window_name, context = context }
+                    )
+                end
                 _G.widget = w
                 return w
             end
@@ -131,6 +139,17 @@ describe("tend.commands", function()
                 persona_dirs = { "/tmp/tend-test-personas" },
                 widget_factory = _G.make_widget,
             })
+
+            -- Providers come from the daemon (provider.list); default to the two
+            -- configured ones, both enabled, so a provider pick resolves.
+            _G.replies["provider.list"] = {
+                result = {
+                    providers = {
+                        { provider_id = "codex", enabled = true, running = 0 },
+                        { provider_id = "claude", enabled = true, running = 0 },
+                    },
+                },
+            }
 
             -- Common fixtures.
             _G.give_workspace = function()
@@ -394,12 +413,44 @@ describe("tend.commands", function()
         assert.is_not_nil(last_notice().msg:find("task", 1, true))
     end)
 
-    it("TendProvider picks from the configured providers", function()
+    it("TendProvider picks from the daemon's enabled providers", function()
         child.lua([[
+            _G.give_workspace()
             _G.ui_choice = 2
             vim.cmd("TendProvider")
         ]])
+        -- Sourced from provider.list (daemon), not client config.
+        assert.equal("provider.list", calls()[1].method)
+        assert.equal("ws-1", calls()[1].params.workspace_id)
         assert.equal("claude", child.lua_get("_G.ctx.provider_id"))
+    end)
+
+    it("TendProvider without a workspace reports instead of calling", function()
+        child.lua([[
+            _G.ui_choice = 1
+            vim.cmd("TendProvider")
+        ]])
+        assert.same({}, calls())
+        assert.is_not_nil(last_notice().msg:find("workspace", 1, true))
+    end)
+
+    it("TendProvider skips providers the daemon reports disabled", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["provider.list"] = {
+                result = {
+                    providers = {
+                        { provider_id = "codex", enabled = true },
+                        { provider_id = "kiro", enabled = false },
+                    },
+                },
+            }
+            _G.ui_choice = 1
+            vim.cmd("TendProvider")
+        ]])
+        local items = child.lua_get("_G.ui_items")
+        assert.equal(1, #items)
+        assert.equal("codex", items[1].provider_id)
     end)
 
     it("TendPersona picks from the persona directories", function()
@@ -451,14 +502,17 @@ describe("tend.commands", function()
             vim.cmd("TendSessionNew")
         ]])
         local sent = calls()
-        assert.equal("agent.start", sent[1].method)
+        -- The provider is picked from the daemon (provider.list) first, then the
+        -- session is started.
+        assert.equal("provider.list", sent[1].method)
+        assert.equal("agent.start", sent[2].method)
         -- No task: a task-less session carries only provider + workspace.
         assert.same({
             provider_id = "claude",
             workspace_id = "ws-1",
             worktree_root = "/repo",
-        }, sent[1].params)
-        assert.is_nil(sent[1].params.task)
+        }, sent[2].params)
+        assert.is_nil(sent[2].params.task)
         assert.equal(
             "ses-1",
             child.lua_get("_G.ctx:active_session().session_id")
@@ -837,14 +891,133 @@ describe("tend.commands", function()
     it("re-running plugin setup rebuilds the command context", function()
         child.lua([[
             require("tend").setup({ daemon = { providers = { "zed" } } })
-            _G.ui_choice = 1
-            vim.cmd("TendProvider")
         ]])
-        local provider = child.lua([[
+        -- A fresh context carrying the new config (providers are the no-pick
+        -- fallback; interactive picks come from the daemon's provider.list).
+        local providers = child.lua([[
             local ctx = require("tend.commands").current()
-            return ctx and ctx.provider_id or "no-context"
+            return ctx and ctx.providers or {}
         ]])
-        assert.equal("zed", provider)
+        assert.same({ "zed" }, providers)
+    end)
+
+    -- Daemon-sourced model/thought switchers acting on the focused session.
+    local function give_session_with_options()
+        child.lua([[
+            _G.give_session()
+            _G.replies["session.list"] = { result = { sessions = {
+                {
+                    session_id = "ses-1",
+                    provider_id = "codex",
+                    current_model_id = "sonnet",
+                    available_models = {
+                        { id = "sonnet", name = "Sonnet" },
+                        { id = "opus", name = "Opus" },
+                    },
+                    current_mode_id = "default",
+                    available_modes = {
+                        { id = "default", name = "Default" },
+                        { id = "think", name = "Think hard" },
+                    },
+                },
+            } } }
+            _G.calls = {}
+        ]])
+    end
+
+    it(
+        "switch_model lists the session's models and sets the chosen one",
+        function()
+            give_session_with_options()
+            child.lua([[
+            _G.replies["session.set_model"] = { result = { current_model_id = "opus" } }
+            _G.ui_choice = 2 -- Opus
+            _G.widget.controls.switch_model()
+        ]])
+            local sent = calls()
+            assert.equal("session.list", sent[1].method)
+            assert.equal("session.set_model", sent[2].method)
+            assert.same(
+                { session_id = "ses-1", model_id = "opus" },
+                sent[2].params
+            )
+        end
+    )
+
+    it("switch_model reflects the new model in the chat header", function()
+        give_session_with_options()
+        child.lua([[
+            _G.replies["session.set_model"] = { result = { current_model_id = "opus" } }
+            _G.ui_choice = 2
+            _G.widget.controls.switch_model()
+        ]])
+        local headers = child.lua_get("_G.widget.headers")
+        local last = headers[#headers]
+        assert.equal("chat", last.window)
+        assert.is_not_nil(last.context:find("opus", 1, true))
+    end)
+
+    it("switch_model reports when the provider offers no models", function()
+        child.lua([[
+            _G.give_session()
+            _G.replies["session.list"] = { result = { sessions = {
+                { session_id = "ses-1", available_models = {} },
+            } } }
+            _G.calls = {}
+            _G.widget.controls.switch_model()
+        ]])
+        local methods = {}
+        for _, c in ipairs(calls()) do
+            table.insert(methods, c.method)
+        end
+        assert.same({ "session.list" }, methods)
+        assert.is_not_nil(last_notice().msg:find("no model", 1, true))
+    end)
+
+    it(
+        "change_thought_level lists the session's modes and sets the chosen one",
+        function()
+            give_session_with_options()
+            child.lua([[
+                _G.replies["session.set_mode"] = { result = { current_mode_id = "think" } }
+                _G.ui_choice = 2 -- Think hard
+                _G.widget.controls.change_thought_level()
+            ]])
+            local sent = calls()
+            assert.equal("session.list", sent[1].method)
+            assert.equal("session.set_mode", sent[2].method)
+            assert.same(
+                { session_id = "ses-1", mode_id = "think" },
+                sent[2].params
+            )
+        end
+    )
+
+    it(
+        "change_thought_level reports when the provider offers no modes",
+        function()
+            child.lua([[
+                _G.give_session()
+                _G.replies["session.list"] = { result = { sessions = {
+                    { session_id = "ses-1", available_modes = {} },
+                } } }
+                _G.calls = {}
+                _G.widget.controls.change_thought_level()
+            ]])
+            assert.is_not_nil(
+                last_notice().msg:find("thought/reasoning", 1, true)
+            )
+        end
+    )
+
+    it("the switchers report when no session is focused", function()
+        child.lua([[
+            _G.ctx:ensure_widget()
+            _G.calls = {}
+            _G.widget.controls.switch_model()
+        ]])
+        assert.same({}, calls())
+        assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
     end)
 
     it("TendOpenChanges fetches file.diff and opens the set's files", function()

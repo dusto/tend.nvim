@@ -26,9 +26,12 @@ local M = {}
 --- @field workspace_id string
 --- @field bufnr integer per-session chat buffer (created via the widget)
 --- @field view tend.transcript.ChatView
+--- @field provider_id? string provider shown in the chat header
+--- @field model_id? string active model, reflected in the chat header
+--- @field mode_id? string active mode (thought/reasoning), reflected in the header
 
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
---- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun()): tend.ui.ChatWidget
+--- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls): tend.ui.ChatWidget
 
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
@@ -92,13 +95,15 @@ function M.setup(opts)
         sessions = {},
         active = nil,
         widget = nil,
-        widget_factory = opts.widget_factory or function(on_submit, on_switch)
-            return ChatWidget:new(
-                vim.api.nvim_get_current_tabpage(),
-                on_submit,
-                on_switch
-            )
-        end,
+        widget_factory = opts.widget_factory
+            or function(on_submit, on_switch, controls)
+                return ChatWidget:new(
+                    vim.api.nvim_get_current_tabpage(),
+                    on_submit,
+                    on_switch,
+                    controls
+                )
+            end,
     }, Context)
     if current then
         current:dispose()
@@ -162,7 +167,20 @@ function Context:ensure_widget()
             return self:submit_prompt(prompt)
         end, function()
             self:switch_session()
-        end)
+        end, {
+            -- Daemon-sourced switchers acting on the active session: provider sets
+            -- the default for new sessions, model/thought reconfigure the focused
+            -- session through the daemon (set_model/set_mode).
+            switch_provider = function()
+                self:provider_pick()
+            end,
+            switch_model = function()
+                self:switch_model()
+            end,
+            change_thought_level = function()
+                self:change_thought_level()
+            end,
+        })
     end
     return self.widget
 end
@@ -184,6 +202,32 @@ function Context:show_session(session, focus_prompt)
     end
     widget.buf_nrs.chat = session.bufnr
     widget:show({ focus_prompt = focus_prompt })
+    self:render_session_header(session)
+end
+
+--- @private
+--- Reflect a session's provider/model/mode in the chat panel header, so the
+--- active configuration is visible without opening a switcher. Skips empty parts
+--- (a session whose model/mode the daemon has not reported yet shows just the
+--- provider); a no-op when nothing is known.
+--- @param session tend.commands.Session
+function Context:render_session_header(session)
+    if not self.widget then
+        return
+    end
+    local parts = {}
+    for _, value in ipairs({
+        session.provider_id,
+        session.model_id,
+        session.mode_id,
+    }) do
+        if value and value ~= "" then
+            table.insert(parts, value)
+        end
+    end
+    if #parts > 0 then
+        self.widget:render_header("chat", table.concat(parts, " · "))
+    end
 end
 
 --- @private
@@ -389,19 +433,56 @@ function Context:provider_pick()
 end
 
 --- @private
---- Choose a configured provider and pass it to cb. Reports and skips cb when
---- none are configured. The selection is not stored as the default — callers
+--- Fetch the workspace's enabled providers from the daemon (provider.list) and
+--- pass them to cb; reports and skips cb when none are enabled. Requires a
+--- workspace. The daemon — not client config — is the source of truth for which
+--- providers exist and are runnable.
+--- @param cb fun(providers: table[]) api.ProviderInfo[] (enabled only)
+function Context:list_providers(cb)
+    local ws = self:need_workspace()
+    if not ws then
+        return
+    end
+    self:call(
+        "provider.list",
+        { workspace_id = ws.workspace_id },
+        function(result)
+            local enabled = {}
+            for _, p in ipairs(result.providers or {}) do
+                if p.enabled then
+                    table.insert(enabled, p)
+                end
+            end
+            if #enabled == 0 then
+                report("tend: no enabled providers on the daemon")
+                return
+            end
+            cb(enabled)
+        end
+    )
+end
+
+--- @private
+--- Choose an enabled daemon provider and pass its id to cb. Reports and skips cb
+--- when none are available. The selection is not stored as the default — callers
 --- that want that (provider_pick) do it themselves.
 --- @param cb fun(provider_id: string)
 function Context:pick_provider(cb)
-    if #self.providers == 0 then
-        report("tend: no providers configured (daemon.providers)")
-        return
-    end
-    vim.ui.select(self.providers, { prompt = "Provider" }, function(provider_id)
-        if provider_id then
-            cb(provider_id)
-        end
+    self:list_providers(function(providers)
+        vim.ui.select(providers, {
+            prompt = "Provider",
+            format_item = function(p)
+                local label = p.provider_id
+                if p.running and p.running > 0 then
+                    label = label .. " (running)"
+                end
+                return label
+            end,
+        }, function(choice)
+            if choice then
+                cb(choice.provider_id)
+            end
+        end)
     end)
 end
 
@@ -450,6 +531,131 @@ function Context:active_session()
 end
 
 --- @private
+--- Fetch the daemon's SessionInfo for the focused session (the authoritative
+--- source of its current/available modes and models) and pass it to cb. Reports
+--- and skips cb when no session is focused or the daemon no longer has it.
+--- @param cb fun(info: table) api.SessionInfo
+function Context:active_session_info(cb)
+    local session = self:active_session()
+    if not session then
+        report(
+            "tend: no focused session; run :TendSessionNew or :TendSessionAttach"
+        )
+        return
+    end
+    local ws = self.workspace
+    local params = ws and { workspace_id = ws.workspace_id } or {}
+    self:call("session.list", params, function(result)
+        for _, s in ipairs(result.sessions or {}) do
+            if s.session_id == session.session_id then
+                cb(s)
+                return
+            end
+        end
+        report("tend: focused session is no longer on the daemon")
+    end)
+end
+
+--- @private
+--- Format a mode/model option for the picker, marking the current one.
+--- @param option table api.SessionMode|api.SessionModel
+--- @param current_id? string
+--- @return string
+local function option_label(option, current_id)
+    local label = (option.name and option.name ~= "") and option.name
+        or option.id
+    return (option.id == current_id and "● " or "  ") .. label
+end
+
+--- Switch the focused session's model: pick from the daemon-advertised models
+--- for the session and set it (session.set_model). Reports cleanly when the
+--- provider offers no model choice, so the keymap is never a dead end.
+function Context:switch_model()
+    self:active_session_info(function(s)
+        local models = s.available_models or {}
+        if #models == 0 then
+            info("tend: this provider offers no model choice")
+            return
+        end
+        vim.ui.select(models, {
+            prompt = "Model",
+            format_item = function(m)
+                return option_label(m, s.current_model_id)
+            end,
+        }, function(choice)
+            if not choice then
+                return
+            end
+            self:call("session.set_model", {
+                session_id = s.session_id,
+                model_id = choice.id,
+            }, function(res)
+                self:apply_session_config(
+                    s.session_id,
+                    { model_id = res and res.current_model_id or choice.id }
+                )
+                info("tend: model → " .. option_label(choice):sub(3))
+            end)
+        end)
+    end)
+end
+
+--- Switch the focused session's thought/reasoning level: pick from the
+--- daemon-advertised modes for the session and set it (session.set_mode). The
+--- daemon models reasoning as session modes (tend-e7p.11). Reports cleanly when
+--- the provider offers no modes.
+function Context:change_thought_level()
+    self:active_session_info(function(s)
+        local modes = s.available_modes or {}
+        if #modes == 0 then
+            info("tend: this provider offers no thought/reasoning levels")
+            return
+        end
+        vim.ui.select(modes, {
+            prompt = "Thought level",
+            format_item = function(m)
+                return option_label(m, s.current_mode_id)
+            end,
+        }, function(choice)
+            if not choice then
+                return
+            end
+            self:call("session.set_mode", {
+                session_id = s.session_id,
+                mode_id = choice.id,
+            }, function(res)
+                self:apply_session_config(
+                    s.session_id,
+                    { mode_id = res and res.current_mode_id or choice.id }
+                )
+                info("tend: thought level → " .. option_label(choice):sub(3))
+            end)
+        end)
+    end)
+end
+
+--- @private
+--- Record a session's new model/mode locally and refresh the chat header if the
+--- session is the focused one. A no-op for an untracked session.
+--- @param session_id string
+--- @param config { model_id?: string, mode_id?: string }
+function Context:apply_session_config(session_id, config)
+    local session = self.sessions[session_id]
+    if not session then
+        return
+    end
+    if config.model_id then
+        session.model_id = config.model_id
+    end
+    if config.mode_id then
+        session.mode_id = config.mode_id
+    end
+    if self.active == session_id then
+        self:render_session_header(session)
+    end
+end
+
+--- @private
 --- Ensure a session is locally tracked: create its chat buffer/view and
 --- subscribe to its stream once. Returns the tracked session. Idempotent — a
 --- session already tracked (started here, or selected before) is returned
@@ -473,6 +679,7 @@ function Context:track_session(spec)
         workspace_id = spec.workspace_id,
         bufnr = bufnr,
         view = view,
+        provider_id = spec.provider_id,
     }
     self.sessions[spec.session_id] = session
     -- Replay the session's retained history into the fresh buffer: a session
@@ -616,6 +823,11 @@ function Context:focus_session(s)
         -- older daemon.
         workspace_id = s.workspace_id or (s.task and s.task.workspace_id) or "",
     })
+    -- The daemon's SessionInfo carries the authoritative current model/mode;
+    -- record them so the chat header reflects the configuration on attach.
+    session.provider_id = s.provider_id or session.provider_id
+    session.model_id = s.current_model_id
+    session.mode_id = s.current_mode_id
     self.active = s.session_id
     return session
 end

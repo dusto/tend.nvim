@@ -45,6 +45,7 @@ describe("daemon smoke", function()
                 function w:show() end
                 function w:hide() end
                 function w:destroy() end
+                function w:render_header() end
                 _G.widget = w
                 return w
             end

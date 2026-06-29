@@ -43,6 +43,7 @@ local METHODS = {
     "task.create",
     "task.list",
     "task.claim",
+    "provider.list",
     "agent.start",
     "agent.prompt",
     "approval.list",
@@ -97,6 +98,13 @@ local function default_handlers(daemon)
                 title = "task",
                 status = "in_progress",
                 assignee = params.assignee,
+            }
+        end,
+        ["provider.list"] = function()
+            return {
+                providers = {
+                    { provider_id = "codex", enabled = true, running = 0 },
+                },
             }
         end,
         ["agent.start"] = function()

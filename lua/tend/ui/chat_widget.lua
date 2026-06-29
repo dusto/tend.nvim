@@ -41,6 +41,7 @@ local WidgetLayout = require("tend.ui.widget_layout")
 --- @field current_position tend.UserConfig.Windows.Position
 --- @field on_submit_input fun(prompt: string): boolean external callback to be called when user submits the input
 --- @field on_switch_session? fun() external callback opening the session switcher; nil disables the switch keymap
+--- @field controls tend.ui.ChatWidget.Controls daemon-sourced switcher callbacks; absent ones leave their keymap unbound (or, for the provider, fall back to the legacy path)
 --- @field _guard_augroup? integer BufferGuard autocmd group ID
 --- @field _winclosed_augroup? integer WinClosed autocmd group ID
 --- @field _closing? boolean True during programmatic window closes
@@ -50,10 +51,26 @@ local WidgetLayout = require("tend.ui.widget_layout")
 local ChatWidget = {}
 ChatWidget.__index = ChatWidget
 
+--- Switcher callbacks the daemon path injects so the widget keymaps act on the
+--- daemon session without the widget depending on the daemon runtime. Each is
+--- optional: an absent model/thought callback leaves its keymap unbound (the
+--- provider/daemon offers no choice), and an absent provider callback falls back
+--- to the legacy in-nvim path until it is removed (tend-9ee.9).
+--- @class tend.ui.ChatWidget.Controls
+--- @field switch_provider? fun()
+--- @field switch_model? fun()
+--- @field change_thought_level? fun()
+
 --- @param tab_page_id integer
 --- @param on_submit_input fun(prompt: string): boolean
 --- @param on_switch_session fun()|nil
-function ChatWidget:new(tab_page_id, on_submit_input, on_switch_session)
+--- @param controls tend.ui.ChatWidget.Controls|nil
+function ChatWidget:new(
+    tab_page_id,
+    on_submit_input,
+    on_switch_session,
+    controls
+)
     self = setmetatable({}, self)
 
     self.win_nrs = {}
@@ -61,6 +78,7 @@ function ChatWidget:new(tab_page_id, on_submit_input, on_switch_session)
 
     self.on_submit_input = on_submit_input
     self.on_switch_session = on_switch_session
+    self.controls = controls or {}
     self.tab_page_id = tab_page_id
 
     self:_initialize()
@@ -418,15 +436,7 @@ function ChatWidget:_bind_keymaps()
             { desc = "Tend: Close Chat widget" }
         )
 
-        BufHelpers.multi_keymap_set(
-            Config.keymaps.widget.switch_provider,
-            bufnr,
-            function()
-                require("tend").switch_provider()
-            end,
-            { desc = "Tend: Switch provider" }
-        )
-
+        self:_bind_controls(bufnr)
         self:_bind_switch_session(bufnr)
     end
 
@@ -459,6 +469,49 @@ function ChatWidget:_bind_keymaps()
     self:bind_chat_keymaps(self.buf_nrs.chat)
 end
 
+--- Bind the provider/model/thought switcher keymaps on a buffer. Each switcher
+--- targets the active daemon session via an injected control callback. The
+--- provider key falls back to the legacy in-nvim path when no daemon callback is
+--- given (a legacy widget), so it keeps working until tend-9ee.9 removes it; the
+--- model and thought keys stay unbound without their callbacks, so they are not
+--- dead keys where the provider offers no such choice.
+--- @param bufnr integer
+function ChatWidget:_bind_controls(bufnr)
+    local controls = self.controls
+    BufHelpers.multi_keymap_set(
+        Config.keymaps.widget.switch_provider,
+        bufnr,
+        function()
+            if controls.switch_provider then
+                controls.switch_provider()
+            else
+                require("tend").switch_provider()
+            end
+        end,
+        { desc = "Tend: Switch provider" }
+    )
+    if controls.switch_model then
+        BufHelpers.multi_keymap_set(
+            Config.keymaps.widget.switch_model,
+            bufnr,
+            function()
+                controls.switch_model()
+            end,
+            { desc = "Tend: Switch model" }
+        )
+    end
+    if controls.change_thought_level then
+        BufHelpers.multi_keymap_set(
+            Config.keymaps.widget.change_thought_level,
+            bufnr,
+            function()
+                controls.change_thought_level()
+            end,
+            { desc = "Tend: Change thought level" }
+        )
+    end
+end
+
 --- Bind the session-switch keymap on a buffer, opening the in-chat switcher
 --- without leaving the widget. A no-op when no on_switch_session callback was
 --- given (e.g. a standalone widget with no daemon session context), so the key
@@ -487,6 +540,7 @@ function ChatWidget:bind_chat_keymaps(bufnr)
     BufHelpers.multi_keymap_set(Config.keymaps.widget.close, bufnr, function()
         self:hide()
     end, { desc = "Tend: Close Chat widget" })
+    self:_bind_controls(bufnr)
     self:_bind_switch_session(bufnr)
     for _, key in ipairs({ "a", "A", "o", "O", "i", "I", "c", "C", "x", "X" }) do
         BufHelpers.keymap_set(bufnr, "n", key, function()

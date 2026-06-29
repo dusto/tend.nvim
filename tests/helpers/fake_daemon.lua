@@ -28,7 +28,7 @@ M.FakeDaemon = FakeDaemon
 -- The daemon contract versions the fake reports: the real shape, satisfying
 -- the plugin's pin.
 M.VERSIONS = {
-    plugin_to_daemon = "0.9.0",
+    plugin_to_daemon = "0.11.0",
     daemon_to_editor = "0.2.0",
     daemon_to_client = "0.1.0",
 }
@@ -43,6 +43,7 @@ local METHODS = {
     "task.create",
     "task.list",
     "task.claim",
+    "provider.list",
     "agent.start",
     "agent.prompt",
     "approval.list",
@@ -97,6 +98,13 @@ local function default_handlers(daemon)
                 title = "task",
                 status = "in_progress",
                 assignee = params.assignee,
+            }
+        end,
+        ["provider.list"] = function()
+            return {
+                providers = {
+                    { provider_id = "codex", enabled = true, running = 0 },
+                },
             }
         end,
         ["agent.start"] = function()

@@ -12,18 +12,22 @@ local M = {}
 --- The minimum contract versions this plugin requires per method set.
 --- plugin_to_daemon 0.2.0 is the first version with task.*.
 M.REQUIRED = {
-    -- 0.11.0 added provider.list, which the provider switcher / :TendProvider use
-    -- to source the provider list (0.10.0 added session.set_model/set_mode for the
-    -- model and thought switchers; 0.9.0 made agent.start's task optional for a
-    -- task-less :TendSessionNew; 0.8.0 added session.list/claim; 0.6.0 added
+    -- 0.14.0 added slash.invoke, which the prompt uses to send "/command"
+    -- submissions (0.13.0 added slash.complete for live argument completion;
+    -- 0.12.0 added slash.list to prime the command set; 0.11.0 added
+    -- provider.list; 0.10.0 added session.set_model/set_mode; 0.9.0 made
+    -- agent.start's task optional; 0.8.0 added session.list/claim; 0.6.0 added
     -- file.diff). Pin the highest contract this plugin relies on so an older
-    -- daemon is rejected at the handshake, not mid-session when a switcher first
+    -- daemon is rejected at the handshake, not mid-session when a command first
     -- runs a missing method.
-    plugin_to_daemon = "0.11.0",
+    plugin_to_daemon = "0.14.0",
     -- The plugin serves editor.open / editor.diff (daemon->editor 0.2.0); pin it
     -- so we never try to render a diff payload a too-old daemon cannot send.
     daemon_to_editor = "0.2.0",
-    daemon_to_client = "0.1.0",
+    -- 0.6.0 added slash_commands_updated, which the prompt's completion source
+    -- consumes (0.5.0 added agent_plan for the todos panel). Pin it so a daemon
+    -- that cannot push the command set is rejected at the handshake.
+    daemon_to_client = "0.6.0",
 }
 
 --- @param s string|nil

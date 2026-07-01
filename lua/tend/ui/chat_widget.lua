@@ -4,6 +4,7 @@ local BufferGuard = require("tend.ui.buffer_guard")
 local ChatNavigation = require("tend.ui.chat_navigation")
 local DiffPreview = require("tend.ui.diff_preview")
 local Logger = require("tend.utils.logger")
+local SlashComplete = require("tend.ui.slash_complete")
 local WindowDecoration = require("tend.ui.window_decoration")
 local WidgetLayout = require("tend.ui.widget_layout")
 
@@ -42,6 +43,7 @@ local WidgetLayout = require("tend.ui.widget_layout")
 --- @field on_submit_input fun(prompt: string): boolean external callback to be called when user submits the input
 --- @field on_switch_session? fun() external callback opening the session switcher; nil disables the switch keymap
 --- @field controls tend.ui.ChatWidget.Controls daemon-sourced switcher callbacks; absent ones leave their keymap unbound (or, for the provider, fall back to the legacy path)
+--- @field slash? tend.ui.SlashSource daemon-sourced slash completion source; nil leaves the prompt without command completion (legacy path)
 --- @field _guard_augroup? integer BufferGuard autocmd group ID
 --- @field _winclosed_augroup? integer WinClosed autocmd group ID
 --- @field _closing? boolean True during programmatic window closes
@@ -65,11 +67,13 @@ ChatWidget.__index = ChatWidget
 --- @param on_submit_input fun(prompt: string): boolean
 --- @param on_switch_session fun()|nil
 --- @param controls tend.ui.ChatWidget.Controls|nil
+--- @param slash tend.ui.SlashSource|nil
 function ChatWidget:new(
     tab_page_id,
     on_submit_input,
     on_switch_session,
-    controls
+    controls,
+    slash
 )
     self = setmetatable({}, self)
 
@@ -79,6 +83,7 @@ function ChatWidget:new(
     self.on_submit_input = on_submit_input
     self.on_switch_session = on_switch_session
     self.controls = controls or {}
+    self.slash = slash
     self.tab_page_id = tab_page_id
 
     self:_initialize()
@@ -346,6 +351,10 @@ end
 
 function ChatWidget:_initialize()
     self.buf_nrs = self:_create_buf_nrs()
+    -- Wire daemon-sourced slash completion onto the prompt input, when provided.
+    if self.slash then
+        SlashComplete.attach(self.buf_nrs.input, self.slash)
+    end
     -- Track every chat buffer the widget owns so destroy() cleans them all. The
     -- daemon path swaps buf_nrs.chat per session (create_chat_buffer), so the
     -- original and each session buffer must be tracked here rather than relying

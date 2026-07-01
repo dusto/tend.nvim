@@ -1189,6 +1189,23 @@ a task is delegated to the session (see |:TendTaskPick|).
   switches which conversation the widget displays. A session's approval
   requests surface as a float resolved in place (see |:TendApprove|).
 
+                                                     *tend-daemon-slash*
+Slash commands (prompt) ~
+
+  Typing `/` at the start of the chat prompt completes slash commands for the
+  focused session. The command set is the daemon's merged list: the agent's
+  own advertised commands plus the built-in daemon/harness commands (task
+  actions). Command names complete locally from that set; a command's first
+  argument (e.g. a task id) completes live from the daemon as you type it.
+
+  Completion is native (`completefunc`) — no LSP and no extra plugin. It
+  triggers automatically on `/`; there is nothing to configure.
+
+  Submitting a `/command args` line invokes it for the focused session. The
+  daemon dispatches: a command it owns runs as a daemon action (its outcome
+  is reported), and anything else is forwarded to the agent as a prompt turn
+  (its output streams into the transcript like a normal message).
+
                                                           *:TendEvents*
 :TendEvents
   Open (or focus) the chat widget on the focused session with the cursor in

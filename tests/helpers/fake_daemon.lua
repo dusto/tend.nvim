@@ -28,9 +28,9 @@ M.FakeDaemon = FakeDaemon
 -- The daemon contract versions the fake reports: the real shape, satisfying
 -- the plugin's pin.
 M.VERSIONS = {
-    plugin_to_daemon = "0.11.0",
+    plugin_to_daemon = "0.14.0",
     daemon_to_editor = "0.2.0",
-    daemon_to_client = "0.1.0",
+    daemon_to_client = "0.6.0",
 }
 
 -- Methods the fake daemon serves.
@@ -46,6 +46,9 @@ local METHODS = {
     "provider.list",
     "agent.start",
     "agent.prompt",
+    "slash.list",
+    "slash.complete",
+    "slash.invoke",
     "approval.list",
     "approval.respond",
 }
@@ -116,6 +119,23 @@ local function default_handlers(daemon)
         end,
         ["agent.prompt"] = function()
             return { stop_reason = "end_turn", status = "idle" }
+        end,
+        ["slash.list"] = function()
+            return {
+                commands = {
+                    {
+                        name = "tasks",
+                        description = "List tasks",
+                        origin = "daemon",
+                    },
+                },
+            }
+        end,
+        ["slash.complete"] = function()
+            return { candidates = {} }
+        end,
+        ["slash.invoke"] = function()
+            return { origin = "daemon", message = "ok" }
         end,
         ["approval.list"] = function()
             return { approvals = {} }

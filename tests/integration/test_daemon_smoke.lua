@@ -177,6 +177,20 @@ describe("daemon smoke", function()
             )]]))
     end)
 
+    it("a '/command' submission invokes it on the daemon", function()
+        attach()
+        start_session("hi")
+        -- Starting the session primes its command set.
+        assert.is_true(wait_for("#_G.daemon:calls_for('slash.list') >= 1"))
+
+        child.lua([[_G.widget.on_submit("/tasks now")]])
+        assert.is_true(wait_for("#_G.daemon:calls_for('slash.invoke') == 1"))
+        local invoke = params("_G.daemon:calls_for('slash.invoke')[1]")
+        assert.equal("ses-1", invoke.session_id)
+        assert.equal("tasks", invoke.command)
+        assert.equal("now", invoke.args)
+    end)
+
     it("an approval prompt round-trips through the float", function()
         attach()
 

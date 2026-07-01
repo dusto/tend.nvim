@@ -1000,6 +1000,50 @@ describe("tend.ui.ChatWidget", function()
         )
 
         it(
+            "attaches slash completion to the input when a source is given",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]],
+                    nil,
+                    nil,
+                    {
+                        list = function()
+                            return {}
+                        end,
+                        complete = function() end,
+                    }
+                )
+
+                assert.is_not_nil(
+                    vim.bo[widget.buf_nrs.input].completefunc:find(
+                        "slash_complete",
+                        1,
+                        true
+                    )
+                )
+            end
+        )
+
+        it(
+            "leaves the input completefunc unset without a slash source",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]]
+                )
+
+                assert.equal("", vim.bo[widget.buf_nrs.input].completefunc)
+            end
+        )
+
+        it(
             "provider keymap falls back to the legacy path without a control",
             function()
                 vim.cmd("tabnew")

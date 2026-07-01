@@ -93,11 +93,12 @@ describe("tend.commands", function()
             -- window machinery stubbed. Captures the submit callback so a test
             -- can simulate the user pressing <CR> in the input.
             _G.widget = nil
-            _G.make_widget = function(on_submit, on_switch, controls)
+            _G.make_widget = function(on_submit, on_switch, controls, slash)
                 local w = {
                     on_submit = on_submit,
                     on_switch = on_switch,
                     controls = controls,
+                    slash = slash,
                     -- A real scratch todos buffer so the TodoList renders into it
                     -- and tests can read the rendered plan lines.
                     buf_nrs = {
@@ -160,6 +161,19 @@ describe("tend.commands", function()
                 },
             }
 
+            -- Tracking a session primes its slash-command set via slash.list.
+            _G.replies["slash.list"] = {
+                result = {
+                    commands = {
+                        {
+                            name = "tasks",
+                            description = "List tasks",
+                            origin = "daemon",
+                        },
+                    },
+                },
+            }
+
             -- Common fixtures.
             _G.give_workspace = function()
                 _G.ctx.workspace = {
@@ -199,6 +213,17 @@ describe("tend.commands", function()
 
     local function calls()
         return child.lua_get("_G.calls")
+    end
+
+    --- The first recorded call for a method (fails the test when absent).
+    --- @return table
+    local function find_call(sent, method)
+        for _, c in ipairs(sent) do
+            if c.method == method then
+                return c
+            end
+        end
+        error("no recorded call for " .. method)
     end
 
     local function last_notice()
@@ -338,10 +363,12 @@ describe("tend.commands", function()
             worktree_root = "/repo",
             task = { provider = "beads", workspace_id = "ws-1", id = "t-1" },
         }, sent[3].params)
-        assert.equal("agent.prompt", sent[4].method)
-        assert.equal("ses-N", sent[4].params.session_id)
-        assert.is_not_nil(sent[4].params.text:find("t-1", 1, true))
-        assert.is_not_nil(sent[4].params.text:find("do one", 1, true))
+        -- Tracking the new session primes its commands (slash.list) before the
+        -- task is handed over, so locate the prompt by method rather than index.
+        local prompt = find_call(sent, "agent.prompt")
+        assert.equal("ses-N", prompt.params.session_id)
+        assert.is_not_nil(prompt.params.text:find("t-1", 1, true))
+        assert.is_not_nil(prompt.params.text:find("do one", 1, true))
         assert.equal("ses-N", child.lua_get("_G.ctx.active"))
         assert.equal("t-1", child.lua_get("_G.ctx.task.ref.id"))
     end)
@@ -384,10 +411,10 @@ describe("tend.commands", function()
             assert.equal("task.list", sent[1].method)
             assert.equal("session.list", sent[2].method)
             -- The task is handed to the EXISTING session, not a fresh agent.start.
-            assert.equal("agent.prompt", sent[3].method)
-            assert.equal("ses-9", sent[3].params.session_id)
-            assert.is_not_nil(sent[3].params.text:find("t-7", 1, true))
-            assert.is_not_nil(sent[3].params.text:find("the details", 1, true))
+            local prompt = find_call(sent, "agent.prompt")
+            assert.equal("ses-9", prompt.params.session_id)
+            assert.is_not_nil(prompt.params.text:find("t-7", 1, true))
+            assert.is_not_nil(prompt.params.text:find("the details", 1, true))
             for _, c in ipairs(sent) do
                 assert.is_not.equal("agent.start", c.method)
             end
@@ -598,6 +625,66 @@ describe("tend.commands", function()
         }, todo_lines())
     end)
 
+    it("primes the session command set via slash.list on track", function()
+        child.lua([[ _G.give_session() ]])
+        -- The default slash.list reply is stored on the session and exposed via
+        -- the injected slash source the widget completes against.
+        assert.same({
+            { name = "tasks", description = "List tasks", origin = "daemon" },
+        }, child.lua_get("_G.ctx.sessions['ses-1'].commands"))
+        assert.equal("tasks", child.lua_get("_G.widget.slash.list()[1].name"))
+    end)
+
+    it(
+        "a slash_commands_updated event replaces the session command set",
+        function()
+            child.lua([[
+            _G.give_session()
+            _G.conn.subscriber.tracked[1].on_event({
+                kind = "event",
+                type = "slash_commands_updated",
+                seq = 1,
+                cursor_seq = 1,
+                stream_id = "str-1",
+                payload = { session_id = "ses-1", commands = {
+                    { name = "compact", description = "Compact", origin = "provider" },
+                    { name = "tasks", description = "List tasks", origin = "daemon" },
+                } },
+            })
+        ]])
+            assert.equal(2, child.lua_get("#_G.ctx.sessions['ses-1'].commands"))
+            assert.equal(
+                "compact",
+                child.lua_get("_G.widget.slash.list()[1].name")
+            )
+        end
+    )
+
+    it("the slash source completes arguments via slash.complete", function()
+        child.lua([[
+            _G.give_session()
+            _G.replies["slash.complete"] = {
+                result = { candidates = {
+                    { value = "t-1", detail = "fix the bug" },
+                } },
+            }
+            _G.captured = nil
+            _G.widget.slash.complete("comment", "t", function(cands)
+                _G.captured = cands
+            end)
+            _G.complete_call = _G.calls[#_G.calls]
+        ]])
+        assert.same({
+            session_id = "ses-1",
+            command = "comment",
+            prefix = "t",
+        }, child.lua_get("_G.complete_call.params"))
+        assert.same(
+            { { value = "t-1", detail = "fix the bug" } },
+            child.lua_get("_G.captured")
+        )
+    end)
+
     it("an empty plan clears and closes the todos panel", function()
         child.lua([[
             _G.give_session()
@@ -729,6 +816,48 @@ describe("tend.commands", function()
             { session_id = "ses-1", text = "and then?" },
             sent[1].params
         )
+    end)
+
+    it("a '/command' submission routes to slash.invoke", function()
+        child.lua([[
+            _G.give_session()
+            _G.replies["slash.invoke"] = {
+                result = { origin = "daemon", message = "closed t-1" },
+            }
+            _G.calls = {}
+            _G.accepted = _G.widget.on_submit("/close t-1")
+        ]])
+        assert.is_true(child.lua_get("_G.accepted"))
+        local sent = calls()
+        assert.equal("slash.invoke", sent[1].method)
+        assert.same({
+            session_id = "ses-1",
+            command = "close",
+            args = "t-1",
+        }, sent[1].params)
+        -- The daemon's outcome message is surfaced.
+        assert.is_not_nil(last_notice().msg:find("closed t-1", 1, true))
+    end)
+
+    it("a bare '/command' with no args omits args", function()
+        child.lua([[
+            _G.give_session()
+            _G.replies["slash.invoke"] = { result = { origin = "daemon" } }
+            _G.calls = {}
+            _G.widget.on_submit("/tasks")
+        ]])
+        local sent = calls()
+        assert.equal("slash.invoke", sent[1].method)
+        assert.same({ session_id = "ses-1", command = "tasks" }, sent[1].params)
+    end)
+
+    it("a plain prompt still routes to agent.prompt", function()
+        child.lua([[
+            _G.give_session()
+            _G.calls = {}
+            _G.widget.on_submit("not a slash")
+        ]])
+        assert.equal("agent.prompt", calls()[1].method)
     end)
 
     it("a submit with no focused session is rejected", function()

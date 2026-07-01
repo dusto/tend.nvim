@@ -13,10 +13,12 @@
 --- (file.diff) and the local diff renderer.
 local ChatView = require("tend.transcript.chat_view")
 local ChatWidget = require("tend.ui.chat_widget")
+local Config = require("tend.config")
 local Connection = require("tend.daemon.connection")
 local DiffReview = require("tend.ui.diff_review")
 local Discovery = require("tend.persona.discovery")
 local Logger = require("tend.utils.logger")
+local TodoList = require("tend.ui.todo_list")
 
 local M = {}
 
@@ -29,6 +31,7 @@ local M = {}
 --- @field provider_id? string provider shown in the chat header
 --- @field model_id? string active model, reflected in the chat header
 --- @field mode_id? string active mode (thought/reasoning), reflected in the header
+--- @field plan? tend.acp.PlanEntry[] latest agent plan, rendered in the todos panel
 
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
 --- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls): tend.ui.ChatWidget
@@ -43,6 +46,7 @@ local M = {}
 --- @field sessions table<string, tend.commands.Session> locally-tracked sessions by id
 --- @field active? string the focused session id; :TendChat/:TendEvents target it
 --- @field widget? tend.ui.ChatWidget the one chat widget, created on first session
+--- @field private todos? tend.ui.TodoList shared todos panel, created on first plan
 --- @field private providers string[]
 --- @field private assignee string
 --- @field private persona_dirs string[]
@@ -95,6 +99,7 @@ function M.setup(opts)
         sessions = {},
         active = nil,
         widget = nil,
+        todos = nil,
         widget_factory = opts.widget_factory
             or function(on_submit, on_switch, controls)
                 return ChatWidget:new(
@@ -154,6 +159,7 @@ function Context:dispose()
         self.widget:destroy()
         self.widget = nil
     end
+    self.todos = nil
 end
 
 --- @private
@@ -186,6 +192,54 @@ function Context:ensure_widget()
 end
 
 --- @private
+--- The shared todos panel controller, created on the first plan. Bound to the
+--- one widget's todos buffer: it shows the widget when a plan arrives (so a plan
+--- surfaces even while the chat is hidden) and closes the panel when the plan is
+--- cleared. One panel reflects whichever session is active.
+--- @return tend.ui.TodoList
+function Context:ensure_todo_list()
+    if not self.todos then
+        local widget = self:ensure_widget()
+        self.todos = TodoList:new(widget.buf_nrs.todos, function(todo_list)
+            if not todo_list:is_empty() then
+                widget:show({ focus_prompt = false })
+            end
+        end, function()
+            widget:close_optional_window("todos")
+        end)
+    end
+    return self.todos
+end
+
+--- @private
+--- Render a session's plan into the shared todos panel. Only the active
+--- session's plan is shown (there is one panel; switching sessions re-renders
+--- via show_session). An empty plan clears the panel. Gated by the todos window
+--- config so a user who disabled the panel never sees it.
+--- @param session tend.commands.Session
+function Context:render_plan(session)
+    if self.active ~= session.session_id then
+        return
+    end
+    if not Config.windows.todos.display then
+        return
+    end
+    local entries = session.plan or {}
+    if #entries == 0 then
+        -- An empty plan is the daemon's full-replacement "no todos"; clear and
+        -- hide the panel rather than leaving an empty window open.
+        if self.todos then
+            self.todos:clear()
+        end
+        if self.widget then
+            self.widget:close_optional_window("todos")
+        end
+        return
+    end
+    self:ensure_todo_list():render(entries)
+end
+
+--- @private
 --- Show the chat widget on a session: point its chat window at the session's
 --- buffer and (re)open the widget. Switching the active session is just
 --- swapping which buffer the one widget renders.
@@ -203,6 +257,7 @@ function Context:show_session(session, focus_prompt)
     widget.buf_nrs.chat = session.bufnr
     widget:show({ focus_prompt = focus_prompt })
     self:render_session_header(session)
+    self:render_plan(session)
 end
 
 --- @private
@@ -240,8 +295,32 @@ function Context:submit_prompt(prompt)
         report("tend: no focused session; run :TendSessionNew")
         return false
     end
+    self:collapse_completed_plan()
     self:prompt_turn(prompt)
     return true
+end
+
+--- @private
+--- When the active session's plan is fully completed, clear its todos panel as
+--- the next turn is submitted (mirrors the legacy auto-close) and drop the
+--- stored plan so switching back does not resurrect a finished plan.
+function Context:collapse_completed_plan()
+    local session = self:active_session()
+    if not session or not session.plan or #session.plan == 0 then
+        return
+    end
+    for _, entry in ipairs(session.plan) do
+        if entry.status ~= "completed" then
+            return
+        end
+    end
+    session.plan = nil
+    if self.todos then
+        self.todos:clear()
+    end
+    if self.widget then
+        self.widget:close_optional_window("todos")
+    end
 end
 
 --- Register the :Tend* user commands for this context (called by setup).
@@ -687,17 +766,34 @@ function Context:track_session(spec)
     -- transcript, not start blank. For a session just started here this is a
     -- no-op (its cursor is already at 0).
     self.conn.subscriber:reset_cursor(spec.workspace_id, spec.stream_id)
-    -- One stream, two consumers: the transcript renders every event and the
-    -- approval manager reacts to approval_requested/resolved.
+    -- One stream, several consumers: the transcript renders every event, the
+    -- approval manager reacts to approval_requested/resolved, and agent_plan
+    -- events feed this session's todos panel.
     self.conn.subscriber:track({
         workspace_id = spec.workspace_id,
         stream_id = spec.stream_id,
         on_event = function(event)
             view:apply(event)
             self.conn.approvals:handle_event(event)
+            self:apply_plan(session, event)
         end,
     })
     return session
+end
+
+--- @private
+--- Route an agent_plan event into a session's stored plan and, when it is the
+--- active session, the shared todos panel. Non-plan events are ignored. The full
+--- plan replaces the previous one, so replays on reconnect are idempotent.
+--- @param session tend.commands.Session
+--- @param event table daemon event envelope
+function Context:apply_plan(session, event)
+    if event.type ~= "agent_plan" then
+        return
+    end
+    local payload = type(event.payload) == "table" and event.payload or {}
+    session.plan = payload.entries or {}
+    self:render_plan(session)
 end
 
 --- One prompt turn on the focused session; the output arrives as transcript

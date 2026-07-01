@@ -598,6 +598,35 @@ describe("tend.commands", function()
         }, todo_lines())
     end)
 
+    it("an empty plan clears and closes the todos panel", function()
+        child.lua([[
+            _G.give_session()
+            local track = _G.conn.subscriber.tracked[1]
+            track.on_event({
+                kind = "event",
+                type = "agent_plan",
+                seq = 1,
+                cursor_seq = 1,
+                stream_id = "str-1",
+                payload = { entries = {
+                    { content = "a step", status = "pending" },
+                } },
+            })
+            _G.widget.closed_panels = {}
+            -- The daemon replaces the plan with an empty one.
+            track.on_event({
+                kind = "event",
+                type = "agent_plan",
+                seq = 2,
+                cursor_seq = 2,
+                stream_id = "str-1",
+                payload = { entries = {} },
+            })
+        ]])
+        assert.same({ "" }, todo_lines())
+        assert.equal("todos", child.lua_get("_G.widget.closed_panels[1]"))
+    end)
+
     it("a plan is preserved across session switches", function()
         child.lua([[
             _G.give_session() -- ses-1 active

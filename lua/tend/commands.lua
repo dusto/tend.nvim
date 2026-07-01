@@ -226,8 +226,13 @@ function Context:render_plan(session)
     end
     local entries = session.plan or {}
     if #entries == 0 then
+        -- An empty plan is the daemon's full-replacement "no todos"; clear and
+        -- hide the panel rather than leaving an empty window open.
         if self.todos then
             self.todos:clear()
+        end
+        if self.widget then
+            self.widget:close_optional_window("todos")
         end
         return
     end

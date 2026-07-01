@@ -32,9 +32,10 @@ local M = {}
 --- @field model_id? string active model, reflected in the chat header
 --- @field mode_id? string active mode (thought/reasoning), reflected in the header
 --- @field plan? tend.acp.PlanEntry[] latest agent plan, rendered in the todos panel
+--- @field commands? tend.slash.Command[] merged slash-command set (provider + daemon)
 
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
---- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls): tend.ui.ChatWidget
+--- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls, slash: tend.ui.SlashSource): tend.ui.ChatWidget
 
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
@@ -101,12 +102,13 @@ function M.setup(opts)
         widget = nil,
         todos = nil,
         widget_factory = opts.widget_factory
-            or function(on_submit, on_switch, controls)
+            or function(on_submit, on_switch, controls, slash)
                 return ChatWidget:new(
                     vim.api.nvim_get_current_tabpage(),
                     on_submit,
                     on_switch,
-                    controls
+                    controls,
+                    slash
                 )
             end,
     }, Context)
@@ -186,9 +188,50 @@ function Context:ensure_widget()
             change_thought_level = function()
                 self:change_thought_level()
             end,
+        }, {
+            -- Slash completion source: command names come from the active
+            -- session's cached (daemon-supplied) set; arguments are completed
+            -- live via the daemon's slash.complete for that session.
+            list = function()
+                return self:active_commands()
+            end,
+            complete = function(command, prefix, cb)
+                self:complete_slash(command, prefix, cb)
+            end,
         })
     end
     return self.widget
+end
+
+--- @private
+--- The active session's merged slash-command set (empty when none is focused or
+--- the daemon has not reported one yet). Backs the prompt's name completion.
+--- @return tend.slash.Command[]
+function Context:active_commands()
+    local session = self:active_session()
+    return (session and session.commands) or {}
+end
+
+--- @private
+--- Complete a slash command's argument against the active session via the
+--- daemon; provider or unknown commands yield no candidates. Errors surface
+--- through :call and the callback receives an empty list.
+--- @param command string
+--- @param prefix string
+--- @param cb fun(candidates: tend.slash.Candidate[])
+function Context:complete_slash(command, prefix, cb)
+    local session = self:active_session()
+    if not session then
+        cb({})
+        return
+    end
+    self:call("slash.complete", {
+        session_id = session.session_id,
+        command = command,
+        prefix = prefix ~= "" and prefix or nil,
+    }, function(result)
+        cb(result.candidates or {})
+    end)
 end
 
 --- @private
@@ -296,8 +339,37 @@ function Context:submit_prompt(prompt)
         return false
     end
     self:collapse_completed_plan()
-    self:prompt_turn(prompt)
+    if prompt:match("^/%S") then
+        self:invoke_slash(prompt)
+    else
+        self:prompt_turn(prompt)
+    end
     return true
+end
+
+--- @private
+--- Route a "/command args" submission to the daemon for the active session. The
+--- daemon dispatches: a command it owns runs as a daemon action (its outcome is
+--- reported here), anything else is forwarded to the agent as a prompt turn (its
+--- output streams into the transcript, like a normal turn).
+--- @param text string the raw prompt, starting with "/"
+function Context:invoke_slash(text)
+    local session = self:active_session()
+    if not session then
+        return
+    end
+    local command, args = text:match("^/([^%s]+)%s*(.-)%s*$")
+    self:call("slash.invoke", {
+        session_id = session.session_id,
+        command = command,
+        args = args ~= "" and args or nil,
+    }, function(result)
+        -- Daemon commands report an outcome message; forwarded commands stream
+        -- their output as transcript events, so only a message is surfaced here.
+        if result.message and result.message ~= "" then
+            info("tend: " .. result.message)
+        end
+    end)
 end
 
 --- @private
@@ -767,8 +839,9 @@ function Context:track_session(spec)
     -- no-op (its cursor is already at 0).
     self.conn.subscriber:reset_cursor(spec.workspace_id, spec.stream_id)
     -- One stream, several consumers: the transcript renders every event, the
-    -- approval manager reacts to approval_requested/resolved, and agent_plan
-    -- events feed this session's todos panel.
+    -- approval manager reacts to approval_requested/resolved, agent_plan events
+    -- feed the todos panel, and slash_commands_updated refreshes this session's
+    -- command set for prompt completion.
     self.conn.subscriber:track({
         workspace_id = spec.workspace_id,
         stream_id = spec.stream_id,
@@ -776,9 +849,30 @@ function Context:track_session(spec)
             view:apply(event)
             self.conn.approvals:handle_event(event)
             self:apply_plan(session, event)
+            self:apply_commands(session, event)
         end,
     })
+    -- Prime the command set so "/" completes before the agent first advertises
+    -- commands: the daemon commands are always available, and slash.list returns
+    -- the merged set. Later slash_commands_updated events replace it.
+    self:call("slash.list", { session_id = spec.session_id }, function(result)
+        session.commands = result.commands or {}
+    end)
     return session
+end
+
+--- @private
+--- Refresh a session's slash-command set from a slash_commands_updated event.
+--- The event carries the full merged set (provider + daemon commands), so it
+--- replaces rather than merges. Non-command events are ignored.
+--- @param session tend.commands.Session
+--- @param event table daemon event envelope
+function Context:apply_commands(session, event)
+    if event.type ~= "slash_commands_updated" then
+        return
+    end
+    local payload = type(event.payload) == "table" and event.payload or {}
+    session.commands = payload.commands or {}
 end
 
 --- @private

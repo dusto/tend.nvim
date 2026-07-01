@@ -29,6 +29,7 @@ tend-contents	tend.txt	/*tend-contents*
 tend-copilot	tend.txt	/*tend-copilot*
 tend-customization	tend.txt	/*tend-customization*
 tend-daemon	tend.txt	/*tend-daemon*
+tend-daemon-slash	tend.txt	/*tend-daemon-slash*
 tend-debug	tend.txt	/*tend-debug*
 tend-diagnostic-icons	tend.txt	/*tend-diagnostic-icons*
 tend-diff-preview	tend.txt	/*tend-diff-preview*

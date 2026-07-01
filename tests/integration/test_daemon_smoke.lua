@@ -38,7 +38,13 @@ describe("daemon smoke", function()
             -- opening real widget windows headlessly.
             _G.widget = nil
             _G.ctx.widget_factory = function(on_submit)
-                local w = { on_submit = on_submit, buf_nrs = { chat = -1 } }
+                local w = {
+                    on_submit = on_submit,
+                    buf_nrs = {
+                        chat = -1,
+                        todos = vim.api.nvim_create_buf(false, true),
+                    },
+                }
                 function w:create_chat_buffer()
                     return vim.api.nvim_create_buf(false, true)
                 end
@@ -46,6 +52,7 @@ describe("daemon smoke", function()
                 function w:hide() end
                 function w:destroy() end
                 function w:render_header() end
+                function w:close_optional_window() end
                 _G.widget = w
                 return w
             end
@@ -144,6 +151,29 @@ describe("daemon smoke", function()
         assert.is_true(wait_for([[vim.tbl_contains(
                 vim.api.nvim_buf_get_lines(_G.ctx:active_session().bufnr, 0, -1, false),
                 "hello from agent"
+            )]]))
+    end)
+
+    it("an agent plan renders into the todos panel", function()
+        attach()
+        start_session("plan it")
+
+        child.lua([[
+            _G.daemon:push_event({
+                stream_id = "str-ses-1",
+                seq = 1,
+                cursor_seq = 1,
+                kind = "event",
+                type = "agent_plan",
+                payload = { entries = {
+                    { content = "first step", status = "in_progress" },
+                    { content = "second step", status = "pending" },
+                } },
+            })
+        ]])
+        assert.is_true(wait_for([[vim.tbl_contains(
+                vim.api.nvim_buf_get_lines(_G.widget.buf_nrs.todos, 0, -1, false),
+                "- [~] first step"
             )]]))
     end)
 

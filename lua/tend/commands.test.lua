@@ -98,14 +98,23 @@ describe("tend.commands", function()
                     on_submit = on_submit,
                     on_switch = on_switch,
                     controls = controls,
-                    buf_nrs = { chat = -1 },
+                    -- A real scratch todos buffer so the TodoList renders into it
+                    -- and tests can read the rendered plan lines.
+                    buf_nrs = {
+                        chat = -1,
+                        todos = vim.api.nvim_create_buf(false, true),
+                    },
                     shows = {},
                     hides = 0,
                     destroys = 0,
+                    closed_panels = {},
                     _open = false,
                 }
                 function w:create_chat_buffer()
                     return vim.api.nvim_create_buf(false, true)
+                end
+                function w:close_optional_window(panel_name)
+                    table.insert(self.closed_panels, panel_name)
                 end
                 function w:is_open()
                     return self._open
@@ -560,6 +569,99 @@ describe("tend.commands", function()
             "agent_message_chunk",
             child.lua_get("_G.conn.approvals.events[1].type")
         )
+    end)
+
+    --- The todos buffer's rendered lines for the current widget.
+    local function todo_lines()
+        return child.lua_get([[vim.api.nvim_buf_get_lines(
+            _G.widget.buf_nrs.todos, 0, -1, false)]])
+    end
+
+    it("an agent_plan event renders into the todos panel", function()
+        child.lua([[
+            _G.give_session()
+            _G.conn.subscriber.tracked[1].on_event({
+                kind = "event",
+                type = "agent_plan",
+                seq = 1,
+                cursor_seq = 1,
+                stream_id = "str-1",
+                payload = { entries = {
+                    { content = "write the test", status = "completed" },
+                    { content = "make it green", status = "in_progress" },
+                } },
+            })
+        ]])
+        assert.same({
+            "- [x] write the test",
+            "- [~] make it green",
+        }, todo_lines())
+    end)
+
+    it("a plan is preserved across session switches", function()
+        child.lua([[
+            _G.give_session() -- ses-1 active
+            _G.conn.subscriber.tracked[1].on_event({
+                kind = "event",
+                type = "agent_plan",
+                seq = 1,
+                cursor_seq = 1,
+                stream_id = "str-1",
+                payload = { entries = {
+                    { content = "ses-1 step", status = "pending" },
+                } },
+            })
+            -- A second session becomes active with its own plan.
+            _G.replies["agent.start"] = { result = {
+                session_id = "ses-2", stream_id = "str-2", status = "idle",
+            } }
+            _G.ui_choice = 1
+            vim.cmd("TendSessionNew")
+            _G.ui_choice = nil
+            _G.conn.subscriber.tracked[2].on_event({
+                kind = "event",
+                type = "agent_plan",
+                seq = 1,
+                cursor_seq = 1,
+                stream_id = "str-2",
+                payload = { entries = {
+                    { content = "ses-2 step", status = "pending" },
+                } },
+            })
+        ]])
+        -- The active (ses-2) plan is shown.
+        assert.same({ "- [ ] ses-2 step" }, todo_lines())
+        -- Switching back to ses-1 (focus + show) re-renders its stored plan.
+        child.lua([[
+            local s = _G.ctx:focus_session({
+                session_id = "ses-1",
+                stream_id = "str-1",
+                workspace_id = "ws-1",
+            })
+            _G.ctx:show_session(s, false)
+        ]])
+        assert.same({ "- [ ] ses-1 step" }, todo_lines())
+    end)
+
+    it("submitting the next prompt collapses a fully completed plan", function()
+        child.lua([[
+            _G.give_session()
+            _G.conn.subscriber.tracked[1].on_event({
+                kind = "event",
+                type = "agent_plan",
+                seq = 1,
+                cursor_seq = 1,
+                stream_id = "str-1",
+                payload = { entries = {
+                    { content = "all done", status = "completed" },
+                } },
+            })
+            _G.widget.on_submit("what next?")
+        ]])
+        -- The panel is cleared and closed, and the stored plan is dropped.
+        assert.same({ "" }, todo_lines())
+        assert.equal("todos", child.lua_get("_G.widget.closed_panels[1]"))
+        assert.is_true(child.lua_get("_G.ctx.sessions['ses-1'].plan == nil"))
     end)
 
     it(

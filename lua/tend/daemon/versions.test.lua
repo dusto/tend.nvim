@@ -23,17 +23,17 @@ describe("tend.daemon.versions", function()
     it(
         "requires the daemon version of the newest contract it relies on",
         function()
-            -- The prompt's slash send relies on slash.invoke (plugin_to_daemon
-            -- 0.14.0); a daemon that predates it (e.g. 0.13.0, which had
-            -- slash.complete but no slash.invoke) must be rejected at the
-            -- handshake, not fail later when a "/command" is first submitted.
+            -- Attaching editor context relies on agent.prompt content blocks
+            -- (plugin_to_daemon 0.15.0); a daemon that predates it (e.g. 0.14.0,
+            -- which had slash.invoke but no content blocks) must be rejected at
+            -- the handshake, not fail later when the first turn carries context.
             assert.is_false(Versions.satisfies({
-                plugin_to_daemon = "0.13.0",
+                plugin_to_daemon = "0.14.0",
                 daemon_to_editor = "0.2.0",
                 daemon_to_client = "0.6.0",
             }))
             assert.is_true(Versions.satisfies({
-                plugin_to_daemon = "0.14.0",
+                plugin_to_daemon = "0.15.0",
                 daemon_to_editor = "0.2.0",
                 daemon_to_client = "0.6.0",
             }))
@@ -45,8 +45,9 @@ describe("tend.daemon.versions", function()
         function()
             -- The completion source consumes slash_commands_updated (daemon_to_client
             -- 0.6.0); an older event contract must be rejected at the handshake.
+            -- plugin_to_daemon is at the pin here so only daemon_to_client fails.
             assert.is_false(Versions.satisfies({
-                plugin_to_daemon = "0.14.0",
+                plugin_to_daemon = "0.15.0",
                 daemon_to_editor = "0.2.0",
                 daemon_to_client = "0.5.0",
             }))

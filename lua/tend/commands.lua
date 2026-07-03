@@ -13,12 +13,18 @@
 --- (file.diff) and the local diff renderer.
 local ChatView = require("tend.transcript.chat_view")
 local ChatWidget = require("tend.ui.chat_widget")
+local CodeSelection = require("tend.ui.code_selection")
 local Config = require("tend.config")
 local Connection = require("tend.daemon.connection")
+local DiagnosticsContext = require("tend.ui.diagnostics_context")
+local DiagnosticsList = require("tend.ui.diagnostics_list")
 local DiffReview = require("tend.ui.diff_review")
 local Discovery = require("tend.persona.discovery")
+local FileList = require("tend.ui.file_list")
 local Logger = require("tend.utils.logger")
+local PromptContent = require("tend.prompt_content")
 local TodoList = require("tend.ui.todo_list")
+local WidgetLayout = require("tend.ui.widget_layout")
 
 local M = {}
 
@@ -48,6 +54,9 @@ local M = {}
 --- @field active? string the focused session id; :TendChat/:TendEvents target it
 --- @field widget? tend.ui.ChatWidget the one chat widget, created on first session
 --- @field private todos? tend.ui.TodoList shared todos panel, created on first plan
+--- @field private file_list? tend.ui.FileList referenced-files context, attached to the next turn
+--- @field private code_selection? tend.ui.CodeSelection code-selection context, attached to the next turn
+--- @field private diagnostics? tend.ui.DiagnosticsList diagnostics context, attached to the next turn
 --- @field private providers string[]
 --- @field private assignee string
 --- @field private persona_dirs string[]
@@ -162,6 +171,9 @@ function Context:dispose()
         self.widget = nil
     end
     self.todos = nil
+    self.file_list = nil
+    self.code_selection = nil
+    self.diagnostics = nil
 end
 
 --- @private
@@ -255,6 +267,176 @@ function Context:ensure_todo_list()
 end
 
 --- @private
+--- Create the editor-context panels (referenced files, code selection,
+--- diagnostics), lazily, bound to the one widget's context buffers. Each shows
+--- the widget and its panel with a count header when populated and closes the
+--- panel when emptied. Their contents attach to the next prompt turn, then clear
+--- (see compose_prompt). Idempotent.
+function Context:ensure_context()
+    if self.file_list then
+        return
+    end
+    local widget = self:ensure_widget()
+    self.file_list = FileList:new(widget.buf_nrs.files, function(list)
+        if list:is_empty() then
+            widget:close_optional_window("files")
+        else
+            widget:render_header("files", tostring(#list:get_files()))
+            widget:show({ focus_prompt = false })
+        end
+    end)
+    self.code_selection = CodeSelection:new(widget.buf_nrs.code, function(sel)
+        if sel:is_empty() then
+            widget:close_optional_window("code")
+        else
+            widget:render_header("code", tostring(#sel:get_selections()))
+            widget:show({ focus_prompt = false })
+        end
+    end)
+    self.diagnostics = DiagnosticsList:new(
+        widget.buf_nrs.diagnostics,
+        function(list)
+            if list:is_empty() then
+                widget:close_optional_window("diagnostics")
+            else
+                widget:render_header(
+                    "diagnostics",
+                    tostring(#list:get_diagnostics())
+                )
+                widget:show({ focus_prompt = false })
+            end
+        end
+    )
+end
+
+--- Add the current visual selection to the next turn's context. Returns whether
+--- a selection was captured (false in normal mode), so add_selection_or_file can
+--- fall back to the current file.
+--- @return boolean added
+function Context:add_selection()
+    local selection = CodeSelection.get_selected_text()
+    if not selection then
+        return false
+    end
+    self:ensure_context()
+    self.code_selection:add(selection)
+    return true
+end
+
+--- Add a buffer (default: the current one) to the next turn's context as a
+--- referenced file. Reports when the buffer has no file name.
+--- @param buf? integer|string buffer number or path
+function Context:add_file(buf)
+    local bufnr = buf and vim.fn.bufnr(buf) or 0
+    local path = vim.api.nvim_buf_get_name(bufnr)
+    if path == "" then
+        report("tend: buffer has no file to add")
+        return
+    end
+    self:ensure_context()
+    self.file_list:add(path)
+end
+
+--- Add file paths and/or buffer numbers to the next turn's context.
+--- @param files (string|integer)[]
+function Context:add_files(files)
+    self:ensure_context()
+    for _, f in ipairs(files) do
+        local path = type(f) == "number" and vim.api.nvim_buf_get_name(f) or f
+        if type(path) == "string" and path ~= "" then
+            self.file_list:add(path)
+        end
+    end
+end
+
+--- Add the visual selection when in visual mode, else the current file.
+function Context:add_selection_or_file()
+    if not self:add_selection() then
+        self:add_file()
+    end
+end
+
+--- Add diagnostics at the cursor line to the next turn's context.
+--- @param bufnr? integer defaults to the current buffer
+--- @return integer count how many were added
+function Context:add_current_line_diagnostics(bufnr)
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+    self:ensure_context()
+    return self.diagnostics:add_many(
+        DiagnosticsList.get_diagnostics_at_cursor(bufnr)
+    )
+end
+
+--- Add all diagnostics in a buffer to the next turn's context.
+--- @param bufnr? integer defaults to the current buffer
+--- @return integer count how many were added
+function Context:add_buffer_diagnostics(bufnr)
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+    self:ensure_context()
+    return self.diagnostics:add_many(
+        DiagnosticsList.get_buffer_diagnostics(bufnr)
+    )
+end
+
+--- @private
+--- Gather any attached editor context (files, selections, diagnostics) into a
+--- content-block array for a turn and clear it — context attaches to exactly one
+--- turn. Returns nil when nothing is attached, so the caller sends plain text.
+--- @param text string
+--- @return tend.PromptContentBlock[]|nil
+function Context:compose_prompt(text)
+    local files = self.file_list and self.file_list:get_files() or {}
+    local selections = self.code_selection
+            and self.code_selection:get_selections()
+        or {}
+    local diags = self.diagnostics and self.diagnostics:get_diagnostics() or {}
+    if #files == 0 and #selections == 0 and #diags == 0 then
+        return nil
+    end
+    local diagnostic_blocks = DiagnosticsContext.format_diagnostics(
+        diags,
+        self:context_width()
+    ).prompt_entries
+    local content = PromptContent.build({
+        text = text,
+        selections = selections,
+        files = files,
+        diagnostics = diagnostic_blocks,
+    })
+    self:clear_context()
+    return content
+end
+
+--- @private
+--- Empty every context panel (after a turn, or a reset).
+function Context:clear_context()
+    if self.file_list then
+        self.file_list:clear()
+    end
+    if self.code_selection then
+        self.code_selection:clear()
+    end
+    if self.diagnostics then
+        self.diagnostics:clear()
+    end
+end
+
+--- @private
+--- Display width for diagnostic formatting: the chat window's when open, else
+--- the configured widget width.
+--- @return integer
+function Context:context_width()
+    local width = WidgetLayout.calculate_width(Config.windows.width)
+    local winid = self.widget
+        and self.widget.win_nrs
+        and self.widget.win_nrs.chat
+    if winid and vim.api.nvim_win_is_valid(winid) then
+        width = vim.api.nvim_win_get_width(winid)
+    end
+    return width
+end
+
+--- @private
 --- Render a session's plan into the shared todos panel. Only the active
 --- session's plan is shown (there is one panel; switching sessions re-renders
 --- via show_session). An empty plan clears the panel. Gated by the todos window
@@ -340,6 +522,11 @@ function Context:submit_prompt(prompt)
     end
     self:collapse_completed_plan()
     if prompt:match("^/%S") then
+        -- A slash command goes to slash.invoke, which carries no content blocks.
+        -- The widget clears the visible context panels on every accepted submit,
+        -- so discard any attached context too — otherwise it stays in the lists
+        -- and silently rides along on the next normal turn.
+        self:clear_context()
         self:invoke_slash(prompt)
     else
         self:prompt_turn(prompt)
@@ -898,10 +1085,16 @@ function Context:prompt_turn(text)
     if not session then
         return
     end
-    self:call("agent.prompt", {
-        session_id = session.session_id,
-        text = text,
-    }, function(result)
+    -- Attach any editor context (files/selection/diagnostics) as structured
+    -- content blocks; a turn with no attached context sends plain text.
+    local params = { session_id = session.session_id }
+    local content = self:compose_prompt(text)
+    if content then
+        params.content = content
+    else
+        params.text = text
+    end
+    self:call("agent.prompt", params, function(result)
         if result.status == "error" then
             report("tend: turn ended with error (" .. result.stop_reason .. ")")
         end

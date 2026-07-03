@@ -293,8 +293,8 @@ function M.filter_unchanged_lines(old_lines, new_lines)
 end
 
 --- Normalize lines array, handling nil and vim.NIL.
---- ACPClient pre-splits ACP text with vim.split, which produces a trailing ""
---- from \n-terminated content. Strip it to match Neovim buffer representation
+--- Newline-terminated content pre-split into lines (with vim.split) carries a
+--- trailing "" from the final \n. Strip it to match Neovim buffer representation
 --- (nvim_buf_get_lines doesn't include a trailing empty line for the final \n).
 ---
 --- Single-strip contract: only removes one trailing "" (e.g. {"a", ""} → {"a"}).
@@ -311,7 +311,7 @@ function M.normalize_to_lines(lines)
         return {}
     end
 
-    -- Strip trailing "" from \n-terminated content split by ACPClient
+    -- Strip trailing "" from pre-split \n-terminated content
     if #lines > 0 and lines[#lines] == "" then
         lines = vim.list_slice(lines, 1, #lines - 1)
     end

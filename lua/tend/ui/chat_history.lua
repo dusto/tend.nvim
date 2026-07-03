@@ -75,7 +75,7 @@ end
 
 --- Prepend restored messages to prompt in ACP Content format
 --- @param messages tend.ui.ChatHistory.Message[]
---- @param prompt tend.acp.Content[] The prompt array to prepend to
+--- @param prompt tend.wire.Content[] The prompt array to prepend to
 function ChatHistory.prepend_restored_messages(messages, prompt)
     for _, msg in ipairs(messages) do
         -- Convert stored messages to ACP Content format

@@ -4,7 +4,7 @@ local FileSystem = require("tend.utils.file_system")
 local DiagnosticsContext = {}
 
 --- @class tend.ui.DiagnosticsContext.FormatResult
---- @field prompt_entries tend.acp.TextContent[]
+--- @field prompt_entries tend.wire.TextContent[]
 --- @field summary_lines string[]
 
 --- @param file_path string|nil
@@ -76,7 +76,7 @@ end
 --- @param chat_width integer
 --- @return tend.ui.DiagnosticsContext.FormatResult format_result
 function DiagnosticsContext.format_diagnostics(diagnostics, chat_width)
-    --- @type tend.acp.TextContent[]
+    --- @type tend.wire.TextContent[]
     local prompt_entries = {}
     --- @type string[]
     local summary_lines = {}

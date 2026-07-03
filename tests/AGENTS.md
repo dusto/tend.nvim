@@ -97,7 +97,7 @@ lua/tend/
 make test
 
 # Run specific test file
-make test-file FILE=lua/tend/acp/agent_modes.test.lua
+make test-file FILE=lua/tend/ui/todo_list.test.lua
 ```
 
 ### First Run
@@ -403,7 +403,7 @@ assert.equal('function', type(call_args[2]))
 - **Integration / functional** — `tests/integration/` or `tests/functional/`
   when a test spans multiple modules or needs real Neovim state across them.
   No formal distinction between the two folders.
-- **ACP / transport-touching tests** — MUST stub `tend.acp.acp_transport`
+- **ACP / transport-touching tests** — MUST stub `tend.wire.acp_transport`
   (or any module that opens a real subprocess / network call). No real
   provider subprocess in tests.
 

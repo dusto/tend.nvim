@@ -20,16 +20,6 @@ function M.new()
         child.lua("vim.opt.rtp:prepend(...)", { root_dir })
 
         child.lua([[
-            local ACPTransportMock = require("tests.mocks.acp_transport_mock")
-            package.loaded["tend.acp.acp_transport"] = ACPTransportMock
-        ]])
-
-        child.lua([[
-            local ACPHealthMock = require("tests.mocks.acp_health_mock")
-            package.loaded["tend.acp.acp_health"] = ACPHealthMock
-        ]])
-
-        child.lua([[
             require("tend").setup()
         ]])
     end

@@ -37,8 +37,8 @@
 --- @class tend.UserConfig.CreateSessionResponseData
 --- @field session_id? string Convenience field; equals response.sessionId when response is non-nil, nil if creation failed
 --- @field tab_page_id number The tabpage ID for this session
---- @field response? tend.acp.SessionCreationResponse Raw ACP create-session response, nil on error
---- @field err? tend.acp.ACPError Error details if session creation failed
+--- @field response? tend.wire.SessionCreationResponse Raw ACP create-session response, nil on error
+--- @field err? tend.wire.ACPError Error details if session creation failed
 
 --- Data passed to the on_prompt_submit hook
 --- @class tend.UserConfig.PromptSubmitData
@@ -57,7 +57,7 @@
 --- @class tend.UserConfig.SessionUpdateData
 --- @field session_id string The ACP session ID
 --- @field tab_page_id number The tabpage ID
---- @field update tend.acp.SessionUpdateMessage ACP session update details.
+--- @field update tend.wire.SessionUpdateMessage ACP session update details.
 
 --- Data passed to the on_file_edit hook
 --- @class tend.UserConfig.FileEditData
@@ -68,7 +68,7 @@
 
 --- Data passed to the on_request_permission hook
 --- @class tend.UserConfig.RequestPermissionData
---- @field request tend.acp.RequestPermission The permission request object
+--- @field request tend.wire.RequestPermission The permission request object
 --- @field session_id string The ACP session ID
 --- @field tab_page_id number The tabpage ID
 
@@ -202,7 +202,7 @@
 --- Tool call title display configuration
 --- @class tend.UserConfig.ToolCalls.Title
 --- @field max_length integer Maximum title length before truncation. 0 disables truncation.
---- @field truncate_title_kinds tend.acp.ToolKind[] Tool kinds affected by max_length.
+--- @field truncate_title_kinds tend.wire.ToolKind[] Tool kinds affected by max_length.
 
 --- Tool call display configuration
 --- @class tend.UserConfig.ToolCalls
@@ -287,7 +287,7 @@
 --- @class tend.UserConfig
 --- @field debug boolean Enable printing debug messages which can be read via `:messages`
 --- @field provider tend.UserConfig.ProviderName
---- @field acp_providers table<tend.UserConfig.ProviderName, tend.acp.ACPProviderConfig|nil>
+--- @field acp_providers table<tend.UserConfig.ProviderName, tend.wire.ACPProviderConfig|nil>
 --- @field windows tend.UserConfig.Windows
 --- @field keymaps tend.UserConfig.Keymaps
 --- @field spinner_chars tend.UserConfig.SpinnerChars

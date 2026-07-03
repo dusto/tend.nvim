@@ -14,9 +14,9 @@ local MAX_DIGIT_KEYS = vim.tbl_count(PERMISSION_KIND_PRIORITY)
 
 --- @class tend.ui.PermissionManager.PermissionRequest
 --- @field tool_call_id string
---- @field request tend.acp.RequestPermission
+--- @field request tend.wire.RequestPermission
 --- @field callback fun(option_id: string|nil)
---- @field sorted_options tend.acp.PermissionOption[]
+--- @field sorted_options tend.wire.PermissionOption[]
 
 --- @class tend.ui.PermissionManager
 --- @field message_writer tend.ui.MessageWriter
@@ -80,8 +80,8 @@ function PermissionManager:_remove_cycle_keymaps()
     self._cycle_keymaps_installed = false
 end
 
---- @param options tend.acp.PermissionOption[]
---- @return tend.acp.PermissionOption[]
+--- @param options tend.wire.PermissionOption[]
+--- @return tend.wire.PermissionOption[]
 function PermissionManager._sort_permission_options(options)
     local sorted = vim.list_extend({}, options)
 
@@ -101,7 +101,7 @@ end
 
 --- Register a new permission request. Multiple requests can be pending
 --- simultaneously; out-of-order resolution is supported.
---- @param request tend.acp.RequestPermission
+--- @param request tend.wire.RequestPermission
 --- @param callback fun(option_id: string|nil)
 function PermissionManager:add_request(request, callback)
     if not request.toolCall or not request.toolCall.toolCallId then

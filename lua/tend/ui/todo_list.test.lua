@@ -3,9 +3,9 @@ local spy = require("tests.helpers.spy")
 
 --- @param content string
 --- @param status string
---- @return tend.acp.PlanEntry
+--- @return tend.wire.PlanEntry
 local function entry(content, status)
-    --- @type tend.acp.PlanEntry
+    --- @type tend.wire.PlanEntry
     local e = { content = content, status = status, priority = "medium" }
     return e
 end

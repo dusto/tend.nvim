@@ -44,7 +44,7 @@ local STATUS_CHECKBOX = {
 }
 
 --- Render plan entries as markdown todo list
---- @param entries tend.acp.PlanEntry[]
+--- @param entries tend.wire.PlanEntry[]
 function TodoList:render(entries)
     local lines = {}
     local completed = 0
@@ -77,7 +77,7 @@ function TodoList:render(entries)
 end
 
 --- Scroll window to show at least 2 non-completed items
---- @param entries tend.acp.PlanEntry[]
+--- @param entries tend.wire.PlanEntry[]
 function TodoList:_scroll_to_non_completed(entries)
     local wins = vim.fn.win_findbuf(self._bufnr)
     if #wins == 0 then

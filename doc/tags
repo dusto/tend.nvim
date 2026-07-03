@@ -12,6 +12,7 @@
 :TendSessionNew	tend.txt	/*:TendSessionNew*
 :TendTaskNew	tend.txt	/*:TendTaskNew*
 :TendTaskPick	tend.txt	/*:TendTaskPick*
+next	tend.txt	/*next*
 tend-auto-scroll	tend.txt	/*tend-auto-scroll*
 tend-blink-cmp	tend.txt	/*tend-blink-cmp*
 tend-chat-icons	tend.txt	/*tend-chat-icons*
@@ -73,6 +74,12 @@ tend-status-icons	tend.txt	/*tend-status-icons*
 tend-system-context	tend.txt	/*tend-system-context*
 tend-tool-call-title-config	tend.txt	/*tend-tool-call-title-config*
 tend-usage	tend.txt	/*tend-usage*
+tend.add_buffer_diagnostics()	tend.txt	/*tend.add_buffer_diagnostics()*
+tend.add_current_line_diagnostics()	tend.txt	/*tend.add_current_line_diagnostics()*
+tend.add_file()	tend.txt	/*tend.add_file()*
+tend.add_files_to_context()	tend.txt	/*tend.add_files_to_context()*
+tend.add_selection()	tend.txt	/*tend.add_selection()*
+tend.add_selection_or_file_to_context()	tend.txt	/*tend.add_selection_or_file_to_context()*
 tend.close()	tend.txt	/*tend.close()*
 tend.nvim	tend.txt	/*tend.nvim*
 tend.open()	tend.txt	/*tend.open()*

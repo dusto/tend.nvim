@@ -355,13 +355,18 @@ headers ~
 ==============================================================================
 USAGE                                                    *tend-usage*
 
-The chat widget lifecycle is driven via `require("tend")`. Sessions
-themselves are owned by the daemon: start, attach, switch, prompt, and
-task/approval/diff operations are the `:Tend*` commands under
-|tend-daemon|, not Lua functions here. These `require("tend")` entries act
-on the daemon's focused session's widget; they report (they do not
+The chat widget lifecycle and context attach are driven via
+`require("tend")`. Sessions themselves are owned by the daemon: start,
+attach, switch, prompt, and task/approval/diff operations are the `:Tend*`
+commands under |tend-daemon|, not Lua functions here. These `require("tend")`
+entries act on the daemon's focused session; they report (they do not
 auto-create a session) when none is focused — start one with
 |:TendSessionNew|.
+
+The context-attach entries below add editor context — files, the current
+selection, diagnostics — to the *next* prompt turn for the focused session.
+The daemon receives them as agent.prompt content blocks (files as resource
+links, images inline); each turn consumes and clears whatever was attached.
 
                                                       *tend.toggle()*
 tend.toggle({opts})
@@ -387,6 +392,45 @@ tend.rotate_layout({layouts})
   Parameters: ~
     {layouts}  (table|nil)  List of position strings. Default:
                             `{ "right", "bottom", "left" }`.
+
+                                               *tend.add_selection()*
+tend.add_selection()
+  Add the current visual selection to the next turn's context (a no-op in
+  normal mode).
+
+                                                    *tend.add_file()*
+tend.add_file()
+  Add the current file (buffer) to the next turn's context.
+
+                                         *tend.add_files_to_context()*
+tend.add_files_to_context({opts})
+  Add a list of file paths and/or buffer numbers to the next turn's
+  context.
+
+  Parameters: ~
+    {opts}  (table)  Required field:
+      `files`  (table)  List of file paths (strings) or buffer numbers
+                        (integers).
+
+>lua
+  require("tend").add_files_to_context({
+    files = { "src/main.lua", "src/utils.lua" },
+  })
+<
+
+                                 *tend.add_selection_or_file_to_context()*
+tend.add_selection_or_file_to_context()
+  Add the visual selection when in visual mode, else the current file.
+
+                                   *tend.add_current_line_diagnostics()*
+tend.add_current_line_diagnostics()
+  Add diagnostics at the current cursor line to the next turn's context;
+  reports when the line has none.
+
+                                       *tend.add_buffer_diagnostics()*
+tend.add_buffer_diagnostics()
+  Add all diagnostics from the current buffer to the next turn's context;
+  reports when the buffer has none.
 
 ==============================================================================
 KEYMAPS                                                *tend-keymaps*

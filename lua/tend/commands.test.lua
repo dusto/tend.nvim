@@ -99,11 +99,14 @@ describe("tend.commands", function()
                     on_switch = on_switch,
                     controls = controls,
                     slash = slash,
-                    -- A real scratch todos buffer so the TodoList renders into it
-                    -- and tests can read the rendered plan lines.
+                    -- Real scratch panel buffers so the TodoList / context lists
+                    -- (files, code, diagnostics) render into them.
                     buf_nrs = {
                         chat = -1,
                         todos = vim.api.nvim_create_buf(false, true),
+                        files = vim.api.nvim_create_buf(false, true),
+                        code = vim.api.nvim_create_buf(false, true),
+                        diagnostics = vim.api.nvim_create_buf(false, true),
                     },
                     shows = {},
                     hides = 0,
@@ -908,6 +911,47 @@ describe("tend.commands", function()
             _G.widget.on_submit("not a slash")
         ]])
         assert.equal("agent.prompt", calls()[1].method)
+    end)
+
+    it("a plain turn sends text (no content array)", function()
+        child.lua([[
+            _G.give_session()
+            _G.calls = {}
+            _G.widget.on_submit("just text")
+        ]])
+        local p = find_call(calls(), "agent.prompt").params
+        assert.equal("just text", p.text)
+        assert.is_nil(p.content)
+    end)
+
+    it("attached files are sent as agent.prompt content blocks", function()
+        child.lua([[
+            _G.give_session()
+            _G.ctx:add_files({ "lua/tend/init.lua" })
+            _G.calls = {}
+            _G.widget.on_submit("review this")
+        ]])
+        local p = find_call(calls(), "agent.prompt").params
+        -- Content supersedes text: no top-level text, a content array instead.
+        assert.is_nil(p.text)
+        assert.equal("text", p.content[1].type)
+        assert.equal("review this", p.content[1].text)
+        assert.equal("resource_link", p.content[2].type)
+        assert.is_not_nil(p.content[2].uri:find("init.lua", 1, true))
+    end)
+
+    it("attached context is cleared after the turn", function()
+        child.lua([[
+            _G.give_session()
+            _G.ctx:add_files({ "lua/tend/init.lua" })
+            _G.widget.on_submit("first")
+            _G.calls = {}
+            _G.widget.on_submit("second")
+        ]])
+        -- The second turn has no attached files, so it sends plain text.
+        local p = find_call(calls(), "agent.prompt").params
+        assert.equal("second", p.text)
+        assert.is_nil(p.content)
     end)
 
     it("a submit with no focused session is rejected", function()

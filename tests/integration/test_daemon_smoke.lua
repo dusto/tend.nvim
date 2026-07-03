@@ -40,9 +40,13 @@ describe("daemon smoke", function()
             _G.ctx.widget_factory = function(on_submit)
                 local w = {
                     on_submit = on_submit,
+                    win_nrs = {},
                     buf_nrs = {
                         chat = -1,
                         todos = vim.api.nvim_create_buf(false, true),
+                        files = vim.api.nvim_create_buf(false, true),
+                        code = vim.api.nvim_create_buf(false, true),
+                        diagnostics = vim.api.nvim_create_buf(false, true),
                     },
                 }
                 function w:create_chat_buffer()
@@ -175,6 +179,25 @@ describe("daemon smoke", function()
                 vim.api.nvim_buf_get_lines(_G.widget.buf_nrs.todos, 0, -1, false),
                 "- [~] first step"
             )]]))
+    end)
+
+    it("attached file context reaches agent.prompt as content", function()
+        attach()
+        start_session("hi")
+
+        child.lua([[
+            _G.ctx:add_files({ "lua/tend/init.lua" })
+            _G.widget.on_submit("look at this")
+        ]])
+        assert.is_true(wait_for("#_G.daemon:calls_for('agent.prompt') >= 2"))
+        -- The turn carrying context is the latest prompt.
+        local prompts = params("_G.daemon:calls_for('agent.prompt')")
+        local last = prompts[#prompts]
+        assert.equal("look at this", last.content[1].text)
+        assert.equal("resource_link", last.content[2].type)
+        assert.is_not_nil(
+            tostring(last.content[2].uri):find("init.lua", 1, true)
+        )
     end)
 
     it("a '/command' submission invokes it on the daemon", function()

@@ -55,6 +55,67 @@ function Tend.rotate_layout(layouts)
     end)
 end
 
+--- Add the current visual selection to the next turn's context.
+function Tend.add_selection()
+    with_context(function(ctx)
+        ctx:add_selection()
+    end)
+end
+
+--- Add the current file to the next turn's context.
+function Tend.add_file()
+    with_context(function(ctx)
+        ctx:add_file()
+    end)
+end
+
+--- Add a list of file paths or buffer numbers to the next turn's context.
+--- @param opts { files: (string|integer)[] }
+function Tend.add_files_to_context(opts)
+    with_context(function(ctx)
+        if opts and type(opts.files) == "table" then
+            ctx:add_files(opts.files)
+        else
+            Logger.notify(
+                "tend: add_files_to_context expects { files = { ... } }, got "
+                    .. vim.inspect(opts),
+                vim.log.levels.WARN
+            )
+        end
+    end)
+end
+
+--- Add the visual selection when in visual mode, else the current file.
+function Tend.add_selection_or_file_to_context()
+    with_context(function(ctx)
+        ctx:add_selection_or_file()
+    end)
+end
+
+--- Add diagnostics at the current cursor line to the next turn's context.
+function Tend.add_current_line_diagnostics()
+    with_context(function(ctx)
+        if ctx:add_current_line_diagnostics() == 0 then
+            Logger.notify(
+                "No diagnostics found on the current line",
+                vim.log.levels.INFO
+            )
+        end
+    end)
+end
+
+--- Add all diagnostics from the current buffer to the next turn's context.
+function Tend.add_buffer_diagnostics()
+    with_context(function(ctx)
+        if ctx:add_buffer_diagnostics() == 0 then
+            Logger.notify(
+                "No diagnostics found in the current buffer",
+                vim.log.levels.INFO
+            )
+        end
+    end)
+end
+
 --- Used to make sure we don't set multiple signal handlers or autocmds, if the user calls setup multiple times
 local traps_set = false
 local cleanup_group = vim.api.nvim_create_augroup("TendCleanup", {
@@ -104,6 +165,27 @@ function Tend.setup(opts)
             vim.v.fcs_choice = "reload"
         end,
     })
+
+    -- Image paste: a clipboard image dropped/pasted in the widget is written to a
+    -- file and attached to the next turn's context (as an image content block).
+    if Config.image_paste.enabled then
+        local Clipboard = require("tend.ui.clipboard")
+        Clipboard.setup({
+            is_cursor_in_widget = function()
+                local ctx = Commands.current()
+                return (ctx and ctx.widget and ctx.widget:is_cursor_in_widget())
+                    or false
+            end,
+            on_paste = function(file_path)
+                local ctx = Commands.current()
+                if not ctx then
+                    return false
+                end
+                ctx:add_files({ file_path })
+                return true
+            end,
+        })
+    end
 end
 
 return Tend

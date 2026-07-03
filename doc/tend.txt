@@ -179,48 +179,15 @@ Using lazy.nvim: ~
       provider = "claude-agent-acp",
     },
 
+    -- The chat widget lifecycle is the require("tend") Lua API (see
+    -- |tend-usage|). Sessions, tasks, and approvals are the :Tend* commands
+    -- (see |tend-daemon|): :TendConnect, :TendSessionNew, :TendChat, ...
     keys = {
       {
         "<C-\\>",
         function() require("tend").toggle() end,
         mode = { "n", "v", "i" },
         desc = "Toggle Tend Chat",
-      },
-      {
-        "<C-'>",
-        function()
-          require("tend").add_selection_or_file_to_context()
-        end,
-        mode = { "n", "v" },
-        desc = "Add file or selection to context",
-      },
-      {
-        "<C-,>",
-        function() require("tend").new_session() end,
-        mode = { "n", "v", "i" },
-        desc = "New Tend Session",
-      },
-      {
-        "<A-i>r",
-        function() require("tend").restore_session() end,
-        desc = "Tend Restore session",
-        mode = { "n", "v", "i" },
-      },
-      {
-        "<leader>ad",
-        function()
-          require("tend").add_current_line_diagnostics()
-        end,
-        desc = "Add current line diagnostic to Tend",
-        mode = { "n" },
-      },
-      {
-        "<leader>aD",
-        function()
-          require("tend").add_buffer_diagnostics()
-        end,
-        desc = "Add all buffer diagnostics to Tend",
-        mode = { "n" },
       },
     },
   }
@@ -599,10 +566,10 @@ Then press `<localleader>p` in the Prompt buffer to paste the image.
 
 Session restoration ~
                                             *tend-session-restore*
-Sessions are interchangeable between Neovim and the terminal. Call
-|tend.restore_session()| to see previous sessions from your
-provider. If the current tab has an active conversation, you will be
-prompted to cancel or clear and restore.
+Reattach to a session the daemon is running with |:TendSessionAttach|
+(see |tend-daemon|), which lists the daemon's active sessions and
+focuses the one you pick. Restoring an earlier, non-running session
+from the provider is not yet wired on the daemon path.
 
 System information ~
                                              *tend-system-context*

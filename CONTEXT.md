@@ -204,12 +204,13 @@ public `init.lua` entry — selectors open from configurable keymaps
 Legacy-path holders inside `AgentConfigOptions`. Used when a provider sends
 `modes`/`models` instead of unified `configOptions`. Same per-tab scope.
 
-**SlashCommands**:
-Per-tab input-buffer completion. Command list arrives via
-`session/update` `available_commands_update` and is augmented locally: the
-plugin filters out `clear` and auto-injects `/new` if absent. Only `/new` is
-intercepted on submit (calls `new_session`); every other slash-prefixed line
-is sent verbatim to the **Provider**.
+**SlashCommands** (legacy `lua/tend/acp/slash_commands.lua`, removed in
+tend-9ee.9):
+Was per-tab input-buffer completion off `available_commands_update`, injecting
+`/new` and intercepting it on submit. On the daemon path this is replaced by
+`lua/tend/ui/slash_complete.lua` + `commands.Context`: the daemon supplies the
+merged command set (`slash.list`/`slash_commands_updated`), completes arguments
+via `slash.complete`, and dispatches submits via `slash.invoke`.
 
 ### Hooks
 
@@ -235,14 +236,19 @@ default.
 
 ## Relationships
 
-- A **SessionRegistry** maps each **Tabpage** to one **SessionManager**.
-- A **SessionManager** owns one **ChatWidget** and references one **ACP
-  Session** id on one **AgentInstance**.
-- One **AgentInstance** per **Provider** name, shared across **Tabpages**.
+The first group described the removed in-plugin runtime (see the banner at the
+top); on the daemon path the daemon owns sessions and providers, and the
+plugin holds one `commands.Context` that owns the one **ChatWidget**:
+
+- The daemon owns **ACP Session**s and **Provider** processes; the plugin's
+  `commands.Context` tracks them and owns the one **ChatWidget** (bound to a
+  **Tabpage**), which renders whichever session is focused.
+
+The rendering relationships below are unchanged (kept UI primitives):
+
 - A **ChatWidget** owns one **MessageWriter** which owns many **Tool Call
   Blocks** keyed by tool call id.
-- A **Permission Request** belongs to exactly one **Tool Call** (by id) on
-  exactly one **SessionManager**.
+- A **Permission Request** belongs to exactly one **Tool Call** (by id).
 - **Tool Call Block**, **ToolCallFold**, **ToolCallDiff**, **ToolBlockBorder**
   all describe the same rendered block from different angles
   (content/folding/diff/borders).

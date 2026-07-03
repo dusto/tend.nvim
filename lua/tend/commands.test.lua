@@ -1046,6 +1046,70 @@ describe("tend.commands", function()
         )
     end)
 
+    it("stop_generation cancels the focused session's turn", function()
+        child.lua([[
+            _G.give_session()
+            _G.calls = {}
+            _G.ctx:stop_generation()
+        ]])
+        local sent = calls()
+        assert.equal("agent.cancel", sent[1].method)
+        assert.same({ session_id = "ses-1" }, sent[1].params)
+    end)
+
+    it("stop_generation without a focused session reports", function()
+        child.lua([[ _G.ctx:stop_generation() ]])
+        assert.same({}, calls())
+        assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
+    end)
+
+    it("restore_session_by_id focuses the matching session", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-Z",
+                            provider_id = "codex",
+                            stream_id = "str-Z",
+                            status = "idle",
+                            workspace_id = "ws-1",
+                        },
+                    },
+                },
+            }
+            _G.ctx:attach_session("ses-Z")
+        ]])
+        assert.equal("ses-Z", child.lua_get("_G.ctx.active"))
+        assert.equal(
+            "str-Z",
+            child.lua_get("_G.conn.subscriber.tracked[1].stream_id")
+        )
+    end)
+
+    it("restore_session_by_id reports an unknown id", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["session.list"] = {
+                result = {
+                    sessions = {
+                        {
+                            session_id = "ses-other",
+                            provider_id = "codex",
+                            stream_id = "str-other",
+                            status = "idle",
+                            workspace_id = "ws-1",
+                        },
+                    },
+                },
+            }
+            _G.ctx:attach_session("nope")
+        ]])
+        assert.is_true(child.lua_get("_G.ctx.active == nil"))
+        assert.is_not_nil(last_notice().msg:find("no session nope", 1, true))
+    end)
+
     it("TendSessionAttach reports when there are no sessions", function()
         child.lua([[
             _G.replies["session.list"] = { result = { sessions = {} } }

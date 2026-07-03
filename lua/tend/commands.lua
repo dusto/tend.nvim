@@ -522,6 +522,11 @@ function Context:submit_prompt(prompt)
     end
     self:collapse_completed_plan()
     if prompt:match("^/%S") then
+        -- A slash command goes to slash.invoke, which carries no content blocks.
+        -- The widget clears the visible context panels on every accepted submit,
+        -- so discard any attached context too — otherwise it stays in the lists
+        -- and silently rides along on the next normal turn.
+        self:clear_context()
         self:invoke_slash(prompt)
     else
         self:prompt_turn(prompt)

@@ -940,6 +940,20 @@ describe("tend.commands", function()
         assert.is_not_nil(p.content[2].uri:find("init.lua", 1, true))
     end)
 
+    it("a slash submission discards attached context", function()
+        child.lua([[
+            _G.give_session()
+            _G.ctx:add_files({ "lua/tend/init.lua" })
+            _G.replies["slash.invoke"] = { result = { origin = "daemon" } }
+            _G.widget.on_submit("/tasks") -- slash: attached context discarded
+            _G.calls = {}
+            _G.widget.on_submit("now") -- normal turn: no stale content
+        ]])
+        local p = find_call(calls(), "agent.prompt").params
+        assert.equal("now", p.text)
+        assert.is_nil(p.content)
+    end)
+
     it("attached context is cleared after the turn", function()
         child.lua([[
             _G.give_session()

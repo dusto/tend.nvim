@@ -24,8 +24,8 @@ describe("tend.ui.PermissionManager", function()
     --- Build a permission request with the given tool_call_id. Defaults to
     --- one allow_once + one reject_once option; pass opts.options to override.
     --- @param tool_call_id string
-    --- @param opts { options?: tend.acp.PermissionOption[] }|nil
-    --- @return tend.acp.RequestPermission
+    --- @param opts { options?: tend.wire.PermissionOption[] }|nil
+    --- @return tend.wire.RequestPermission
     local function make_request(tool_call_id, opts)
         local options = opts and opts.options
             or {

@@ -37,7 +37,7 @@ local M = {}
 --- @field provider_id? string provider shown in the chat header
 --- @field model_id? string active model, reflected in the chat header
 --- @field mode_id? string active mode (thought/reasoning), reflected in the header
---- @field plan? tend.acp.PlanEntry[] latest agent plan, rendered in the todos panel
+--- @field plan? tend.wire.PlanEntry[] latest agent plan, rendered in the todos panel
 --- @field commands? tend.slash.Command[] merged slash-command set (provider + daemon)
 
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean

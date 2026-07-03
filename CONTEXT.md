@@ -4,15 +4,17 @@ Domain glossary for tend.nvim. Defines terms that are overloaded, ambiguous,
 or unique to this project. Not a spec. Not a design doc. Implementation
 details belong in `AGENTS.md` (rules) or `docs/adr/` (decisions).
 
-> **Much of this glossary predates the daemon migration.** Terms for the
-> in-plugin ACP + session runtime — **AgentInstance**, **ACPClient**,
-> **ACPTransport**, **Subscriber**, **ACP Session**, **AgentConfigOptions**,
-> the legacy **SlashCommands**/**Hooks**/**Reconnect**, and the
-> **Relationships**/**Example dialogue** built on them — describe code under
-> `lua/tend/acp` that is dormant and removed in tend-9ee.9. **SessionManager**
-> and **SessionRegistry** are already gone (tend-9ee.10): the daemon owns
-> sessions and the plugin drives it via the connection-scoped `commands.Context`
-> (`require("tend.commands").current()`).
+> **Much of this glossary is historical.** The in-plugin ACP + session runtime
+> it describes — **AgentInstance**, **ACPClient**, **ACPTransport**,
+> **Subscriber**, **ACP Session**, **AgentConfigOptions**, **SessionManager**,
+> **SessionRegistry**, and the legacy **SlashCommands**/**Hooks**/**Reconnect**
+> plus the **Relationships**/**Example dialogue** built on them — has been
+> **removed** (tend-9ee.10 / tend-9ee.9). The daemon owns providers, sessions,
+> and the event bus; the plugin drives it via the connection-scoped
+> `commands.Context` (`require("tend.commands").current()`). The ACP-style
+> content/tool-call type vocabulary the UI still renders now lives in
+> `lua/tend/wire_types.lua` as `tend.wire.*`. These entries are kept only as
+> background on concepts the daemon now owns.
 
 ## Language
 

@@ -33,11 +33,11 @@ If in doubt, ask first
 - **Autocommands are a last resort.** Prefer direct calls, explicit hooks,
   or buffer-local keymaps. If an `autocmd` is the right tool, justify it
   in the PR
-- **No provider-specific hacks.** ACP is a standard
-  ([spec](https://agentclientprotocol.com/)); `if provider == "foo"`
-  branches get rejected - report provider bugs upstream. Only exception:
-  documented fallbacks in `ACPClient` for fields missing from the spec
-  (see `lua/tend/acp/AGENTS.md` -> "Provider quirk handling")
+- **No provider-specific hacks.** The daemon owns ACP and provider processes,
+  so the plugin has no `if provider == "foo"` branches at all — provider quirks
+  and spec fallbacks live in the daemon
+  ([dusto/tend](https://github.com/dusto/tend)), not here. Report provider bugs
+  upstream.
 
 ## Prerequisites
 

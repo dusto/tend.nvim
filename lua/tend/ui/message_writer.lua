@@ -8,6 +8,18 @@ local Logger = require("tend.utils.logger")
 local Theme = require("tend.theme")
 local ToolCallBlocks = require("tend.ui.tool_call_blocks")
 
+--- Build a message-chunk update (the shape write_message/write_restoring_message
+--- consume) from replayed history text.
+--- @param text string
+--- @param role "user_message_chunk"|"agent_message_chunk"
+--- @return tend.wire.SessionUpdateMessage
+local function message_chunk(text, role)
+    return {
+        sessionUpdate = role,
+        content = { type = "text", text = text },
+    } --[[@as tend.wire.SessionUpdateMessage]]
+end
+
 local NS_TOOL_BLOCKS = ToolCallBlocks.NS_TOOL_BLOCKS
 local NS_DIFF_HIGHLIGHTS = vim.api.nvim_create_namespace("tend_diff_highlights")
 local NS_STATUS = vim.api.nvim_create_namespace("tend_status_footer")
@@ -34,17 +46,17 @@ local TITLE_FENCE = "`````"
 --- @field all? boolean TODO: check if it's still necessary to replace all occurrences or the agents send multiple requests
 
 --- @class tend.ui.MessageWriter.PermissionState
---- @field sorted_options tend.acp.PermissionOption[] Options sorted by priority
+--- @field sorted_options tend.wire.PermissionOption[] Options sorted by priority
 --- @field is_focused boolean Whether the block is the currently focused permission target
 --- @field focused_button_index? integer 1-indexed; which button inside the focused block is highlighted (h / l selection). Nil = no button focus (block not focused).
 
 --- @class tend.ui.MessageWriter.ToolCallBlock
 --- @field tool_call_id string
---- @field kind? tend.acp.ToolKind
+--- @field kind? tend.wire.ToolKind
 --- @field argument? string
 --- @field file_path? string
 --- @field extmark_id? integer Range extmark spanning the block
---- @field status? tend.acp.ToolCallStatus
+--- @field status? tend.wire.ToolCallStatus
 --- @field body? string[]
 --- @field diff? tend.ui.MessageWriter.ToolCallDiff
 --- @field has_fold? boolean
@@ -107,7 +119,7 @@ end
 --- Writes a structural message (e.g. welcome banner) without triggering
 --- a sender header. Resets sender tracking after so the next real message
 --- gets its own header.
---- @param update tend.acp.SessionUpdateMessage
+--- @param update tend.wire.SessionUpdateMessage
 function MessageWriter:write_structural_message(update)
     local saved = self._last_sender
     self._last_sender = "user"
@@ -164,7 +176,7 @@ function MessageWriter:_maybe_write_sender_header(session_update_type)
 end
 
 --- Writes a message during session restore (suppresses timestamp in user header)
---- @param update tend.acp.SessionUpdateMessage
+--- @param update tend.wire.SessionUpdateMessage
 function MessageWriter:write_restoring_message(update)
     self._is_restoring = true
     self:write_message(update)
@@ -172,7 +184,7 @@ function MessageWriter:write_restoring_message(update)
 end
 
 --- Writes a full message to the chat buffer and appends a trailing blank line
---- @param update tend.acp.SessionUpdateMessage
+--- @param update tend.wire.SessionUpdateMessage
 function MessageWriter:write_message(update)
     local text = update.content
         and update.content.type == "text"
@@ -198,7 +210,7 @@ end
 
 --- Appends message chunks to the last line and column in the chat buffer
 --- Some ACP providers stream chunks instead of full messages
---- @param update tend.acp.SessionUpdateMessage
+--- @param update tend.wire.SessionUpdateMessage
 function MessageWriter:write_message_chunk(update)
     if
         not update.content
@@ -1065,7 +1077,6 @@ end
 --- headers show the correct provider from history.
 --- @param messages tend.ui.ChatHistory.Message[]
 function MessageWriter:replay_history_messages(messages)
-    local ACPPayloads = require("tend.acp.acp_payloads")
     local current_provider = self._provider_name
 
     for _, msg in ipairs(messages) do
@@ -1076,10 +1087,10 @@ function MessageWriter:replay_history_messages(messages)
 
         if msg.type == "user" then
             self:write_restoring_message(
-                ACPPayloads.generate_user_message(msg.text)
+                message_chunk(msg.text, "user_message_chunk")
             )
         elseif msg.type == "agent" then
-            self:write_message(ACPPayloads.generate_agent_message(msg.text))
+            self:write_message(message_chunk(msg.text, "agent_message_chunk"))
         elseif msg.type == "thought" then
             self:_maybe_write_sender_header("agent_thought_chunk")
 

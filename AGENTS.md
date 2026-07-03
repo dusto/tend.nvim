@@ -7,21 +7,19 @@ blocks, approvals/permissions, and diffs, and forwards editor-local actions. The
 the event bus, and approvals, over a bidirectional JSON-RPC 2.0 Unix socket. The
 daemon and the wire contract live in [dusto/tend](https://github.com/dusto/tend).
 
-> **Architecture in transition.** The daemon now owns sessions: the in-plugin
-> session runtime (`session_manager`/`session_registry`/`session_restore`) has
-> been removed and the plugin drives the daemon over JSON-RPC (`lua/tend/commands.lua`,
-> the connection-scoped `Context`, is the client). The chat/diff/tool-call **UI
-> primitives are kept** and are re-pointed at the daemon. One legacy piece
-> remains: the in-plugin ACP transport/provider layer under `lua/tend/acp` (plus
-> its `CONTEXT.md`/`lua/tend/acp/AGENTS.md`, which still describe the old
-> `SessionManager` coupling); it is dormant (nothing spawns it) and is removed in
-> tend-9ee.9.
+> **Daemon-client architecture.** The daemon owns ACP providers, sessions, and
+> the event bus; the plugin drives it over JSON-RPC (`lua/tend/commands.lua`, the
+> connection-scoped `Context`, is the client). The in-plugin ACP + session
+> runtime (`lua/tend/acp`, `session_manager`/`session_registry`/`session_restore`)
+> has been fully removed. The chat/diff/tool-call **UI primitives are kept** and
+> render daemon events. The ACP-style content/message/tool-call type vocabulary
+> the UI is annotated with now lives in `lua/tend/wire_types.lua` as `tend.wire.*`
+> (a pure LuaCATS types file, no runtime).
 
 ## Nested instructions
 
 Read these before touching the matching area:
 
-- `lua/tend/acp/AGENTS.md` - ACP client, tool calls, permissions, providers
 - `lua/tend/ui/AGENTS.md` - chat UI: topology, lifecycle contracts
   (open/close/destroy), MessageWriter state machines, tool-call block layout,
   folding, auto-scroll, permission reanchor, traps
@@ -235,9 +233,16 @@ Source of truth: `lua/tend/init.lua` exports.
 - **Config entry** — `setup` (merges config, calls `require("tend.commands").setup`,
   installs the `FileChangedShell` reload autocmd and theme once).
 
-Legacy in-plugin session ops (context adders, `new_session`, `switch_provider`,
-`stop_generation`, `restore_session`) were removed with the session runtime; the
-daemon-backed replacements land in tend-9ee.10.2 / tend-9ee.10.3.
+- **Context attach** — `add_file`/`add_selection`/`add_files_to_context`/
+  `add_selection_or_file_to_context`/`add_current_line_diagnostics`/
+  `add_buffer_diagnostics` populate the daemon session's next-turn context.
+- **Session actions** — `stop_generation` (`agent.cancel`), `switch_provider`
+  (picks the provider for new sessions), `restore_session` /
+  `restore_session_by_id` (reattach to a running daemon session).
+
+All delegate to the daemon `Context`. `new_session` and the old in-nvim
+provider-switch-with-history-replay were not carried over; sessions start via
+`:TendSessionNew` and provider is bound at start.
 
 Cleanup: the daemon owns session lifecycles, so there is no per-tab session
 teardown. Re-running `setup` stops the previous `Context`'s connection

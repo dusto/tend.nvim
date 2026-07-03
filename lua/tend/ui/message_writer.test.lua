@@ -100,7 +100,7 @@ describe("tend.ui.MessageWriter", function()
 
     --- @param text string
     --- @param session_update string|nil
-    --- @return tend.acp.SessionUpdateMessage
+    --- @return tend.wire.SessionUpdateMessage
     local function make_update(text, session_update)
         return {
             sessionUpdate = session_update or "agent_message_chunk",
@@ -109,7 +109,7 @@ describe("tend.ui.MessageWriter", function()
     end
 
     --- @param text string
-    --- @return tend.acp.SessionUpdateMessage
+    --- @return tend.wire.SessionUpdateMessage
     local function make_thought_update(text)
         return {
             sessionUpdate = "agent_thought_chunk",
@@ -118,7 +118,7 @@ describe("tend.ui.MessageWriter", function()
     end
 
     --- @param id string
-    --- @param status tend.acp.ToolCallStatus
+    --- @param status tend.wire.ToolCallStatus
     --- @param body? string[]
     --- @return tend.ui.MessageWriter.ToolCallBlock
     local function make_tool_call_block(id, status, body)
@@ -1422,7 +1422,7 @@ describe("tend.ui.MessageWriter", function()
             }
         end)
 
-        --- @param kind tend.acp.ToolKind
+        --- @param kind tend.wire.ToolKind
         --- @param argument string
         --- @return tend.ui.MessageWriter.ToolCallBlock block
         local function make_title_block(kind, argument)

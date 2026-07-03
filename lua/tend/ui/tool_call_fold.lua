@@ -7,7 +7,7 @@ local Fold = {}
 --- @field bufnr integer
 --- @field start_row integer 0-indexed inclusive
 --- @field end_row integer 0-indexed inclusive
---- @field status? tend.acp.ToolCallStatus
+--- @field status? tend.wire.ToolCallStatus
 --- @field is_diff boolean
 
 --- @return integer|nil threshold nil when folding is disabled
@@ -19,7 +19,7 @@ function Fold.threshold()
     return math.max(0, cfg.threshold or 0)
 end
 
---- @param status tend.acp.ToolCallStatus|nil
+--- @param status tend.wire.ToolCallStatus|nil
 --- @return boolean should_fold
 function Fold.should_auto_fold(status)
     if status == "completed" then

@@ -26,7 +26,7 @@ describe("Health", function()
 
     before_each(function()
         package.loaded["tend.health"] = nil
-        original_acp_health = package.loaded["tend.acp.acp_health"]
+        original_acp_health = package.loaded["tend.wire.acp_health"]
         original_config = package.loaded["tend.config"]
         original_clipboard_image = package.loaded["tend.ui.clipboard_image"]
         original_commands = package.loaded["tend.commands"]
@@ -37,7 +37,7 @@ describe("Health", function()
             end,
         }
 
-        package.loaded["tend.acp.acp_health"] = {
+        package.loaded["tend.wire.acp_health"] = {
             is_command_available = function()
                 return true
             end,
@@ -82,7 +82,7 @@ describe("Health", function()
         executable_stub:revert()
 
         package.loaded["tend.health"] = nil
-        package.loaded["tend.acp.acp_health"] = original_acp_health
+        package.loaded["tend.wire.acp_health"] = original_acp_health
         package.loaded["tend.config"] = original_config
         package.loaded["tend.ui.clipboard_image"] = original_clipboard_image
         package.loaded["tend.commands"] = original_commands

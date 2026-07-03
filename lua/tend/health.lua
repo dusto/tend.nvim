@@ -6,9 +6,6 @@ local M = {}
 local vim_health = vim.health
 
 function M.check()
-    local ACPHealth = require("tend.acp.acp_health")
-    local Config = require("tend.config")
-
     vim_health.start("tend.nvim")
     -- Check Neovim version
     local nvim_version = vim.version()
@@ -89,87 +86,8 @@ function M.check()
         end
     end
 
-    -- Check current provider
-    vim_health.start("ACP Provider Configuration")
-    local provider_name = Config.provider
-    local provider_config = Config.acp_providers[provider_name]
-    if not provider_config then
-        vim_health.error(
-            string.format(
-                "Provider '%s' not found in config.acp_providers",
-                provider_name
-            )
-        )
-    else
-        vim_health.ok(
-            string.format(
-                "Current provider: %s",
-                provider_config.name or provider_name
-            )
-        )
-        local command = provider_config.command
-        if ACPHealth.is_command_available(command) then
-            vim_health.ok(string.format("%s: installed", command))
-        else
-            vim_health.error(
-                string.format(
-                    "%s: not found in PATH or not executable",
-                    command
-                ),
-                {
-                    "See requirements: https://github.com/dusto/tend.nvim?tab=readme-ov-file#-requirements",
-                }
-            )
-        end
-    end
-
-    -- Check all configured providers (excluding current one)
-    vim_health.start(
-        "Other ACP Providers (optional, if don't intend to use them)"
-    )
-    for name, config in pairs(Config.acp_providers) do
-        if config and name ~= provider_name then
-            local command = config.command
-            if ACPHealth.is_command_available(command) then
-                vim_health.ok(
-                    string.format("[%s] %s: installed", name, command)
-                )
-            else
-                vim_health.warn(
-                    string.format("[%s] %s: not found", name, command)
-                )
-            end
-        end
-    end
-
-    -- Check Node.js and package managers
-    vim_health.start("Node.js and Package Managers")
-    vim_health.info(
-        "Most of the ACP providers require Node.js and a package manager to run, so you'll need at least one installed."
-    )
-
-    if ACPHealth.is_node_installed() then
-        vim_health.ok("node: installed")
-    else
-        vim_health.error("node: not found")
-    end
-
-    local managers = { "pnpm", "bun", "yarn", "npm" }
-    for _, name in ipairs(managers) do
-        local check_fn = ACPHealth["is_" .. name .. "_installed"]
-        if check_fn and check_fn() then
-            if name == "npm" then
-                vim_health.ok(
-                    string.format(
-                        "%s: installed (global path tied to node version, packages are lost when switching node versions)",
-                        name
-                    )
-                )
-            else
-                vim_health.ok(string.format("%s: installed", name))
-            end
-        end
-    end
+    -- Provider processes (ACP CLIs, Node.js) are owned and health-checked by the
+    -- daemon now, not the plugin; see the daemon's provider health reporting.
 
     -- Clipboard image paste tooling
     vim_health.start("Clipboard Image Paste")

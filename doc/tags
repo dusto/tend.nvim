@@ -83,7 +83,11 @@ tend.add_selection_or_file_to_context()	tend.txt	/*tend.add_selection_or_file_to
 tend.close()	tend.txt	/*tend.close()*
 tend.nvim	tend.txt	/*tend.nvim*
 tend.open()	tend.txt	/*tend.open()*
+tend.restore_session()	tend.txt	/*tend.restore_session()*
+tend.restore_session_by_id()	tend.txt	/*tend.restore_session_by_id()*
 tend.rotate_layout()	tend.txt	/*tend.rotate_layout()*
 tend.setup()	tend.txt	/*tend.setup()*
+tend.stop_generation()	tend.txt	/*tend.stop_generation()*
+tend.switch_provider()	tend.txt	/*tend.switch_provider()*
 tend.toggle()	tend.txt	/*tend.toggle()*
 tend.txt	tend.txt	/*tend.txt*

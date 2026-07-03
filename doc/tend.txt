@@ -355,13 +355,13 @@ headers ~
 ==============================================================================
 USAGE                                                    *tend-usage*
 
-The chat widget lifecycle and context attach are driven via
-`require("tend")`. Sessions themselves are owned by the daemon: start,
-attach, switch, prompt, and task/approval/diff operations are the `:Tend*`
-commands under |tend-daemon|, not Lua functions here. These `require("tend")`
-entries act on the daemon's focused session; they report (they do not
-auto-create a session) when none is focused — start one with
-|:TendSessionNew|.
+The `require("tend")` functions below cover the chat widget lifecycle,
+editor-context attach, and a few session actions (stop, provider, reattach)
+as convenience entry points for keymaps. Sessions themselves are owned by the
+daemon; starting, prompting, delegating tasks, approvals, and diff review are
+the `:Tend*` commands under |tend-daemon|. These functions act on the daemon's
+focused session; they report (they do not auto-create a session) when none is
+focused — start one with |:TendSessionNew|.
 
 The context-attach entries below add editor context — files, the current
 selection, diagnostics — to the *next* prompt turn for the focused session.
@@ -431,6 +431,29 @@ tend.add_current_line_diagnostics()
 tend.add_buffer_diagnostics()
   Add all diagnostics from the current buffer to the next turn's context;
   reports when the buffer has none.
+
+                                             *tend.stop_generation()*
+tend.stop_generation()
+  Cancel the in-flight turn on the focused session, returning it to idle.
+  Safe when no turn is running.
+
+                                             *tend.switch_provider()*
+tend.switch_provider()
+  Pick the provider used for new sessions. The daemon binds a provider at
+  session start, so this sets the default for the next session rather than
+  switching a running session's provider. Equivalent to |:TendProvider|.
+
+                                             *tend.restore_session()*
+tend.restore_session()
+  Reattach to a running daemon session: lists them and focuses the chosen
+  one. Equivalent to |:TendSessionAttach|.
+
+                                          *tend.restore_session_by_id()*
+tend.restore_session_by_id({session_id})
+  Reattach to a specific running daemon session by id.
+
+  Parameters: ~
+    {session_id}  (string)  The session id to focus.
 
 ==============================================================================
 KEYMAPS                                                *tend-keymaps*

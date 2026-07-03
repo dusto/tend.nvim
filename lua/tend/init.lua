@@ -116,6 +116,38 @@ function Tend.add_buffer_diagnostics()
     end)
 end
 
+--- Cancel the in-flight turn on the focused session (returns it to idle).
+function Tend.stop_generation()
+    with_context(function(ctx)
+        ctx:stop_generation()
+    end)
+end
+
+--- Pick the provider used for new sessions. The daemon binds a provider at
+--- session start, so this sets the default for the next session rather than
+--- switching a running session's provider. Equivalent to |:TendProvider|.
+function Tend.switch_provider()
+    with_context(function(ctx)
+        ctx:provider_pick()
+    end)
+end
+
+--- Reattach to a running daemon session: list them and focus the chosen one.
+--- Equivalent to |:TendSessionAttach|.
+function Tend.restore_session()
+    with_context(function(ctx)
+        ctx:switch_session()
+    end)
+end
+
+--- Reattach to a specific running daemon session by id.
+--- @param session_id string
+function Tend.restore_session_by_id(session_id)
+    with_context(function(ctx)
+        ctx:attach_session(session_id)
+    end)
+end
+
 --- Used to make sure we don't set multiple signal handlers or autocmds, if the user calls setup multiple times
 local traps_set = false
 local cleanup_group = vim.api.nvim_create_augroup("TendCleanup", {

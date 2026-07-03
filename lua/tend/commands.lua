@@ -1248,6 +1248,35 @@ function Context:session_attach()
     self:switch_session()
 end
 
+--- Attach to a specific daemon session by id: track its stream and focus it.
+--- Backs require("tend").restore_session_by_id; reports when the daemon has no
+--- such session.
+--- @param session_id string
+function Context:attach_session(session_id)
+    self:with_sessions(function(list)
+        for _, s in ipairs(list) do
+            if s.session_id == session_id then
+                self:show_session(self:focus_session(s), true)
+                info("tend: focused session " .. session_id)
+                return
+            end
+        end
+        report("tend: no session " .. session_id)
+    end)
+end
+
+--- Cancel the in-flight turn on the focused session (agent.cancel), returning it
+--- to idle. Backs require("tend").stop_generation; a no-op report when nothing
+--- is focused. Safe when no turn is running — the daemon just returns it to idle.
+function Context:stop_generation()
+    local session = self:active_session()
+    if not session then
+        report("tend: no focused session")
+        return
+    end
+    self:call("agent.cancel", { session_id = session.session_id })
+end
+
 --- @private
 --- Hand a task to a session: list the workspace's sessions and offer them
 --- alongside a "new session" target. Picking an existing session delivers the

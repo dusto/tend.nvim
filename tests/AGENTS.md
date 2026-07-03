@@ -403,9 +403,11 @@ assert.equal('function', type(call_args[2]))
 - **Integration / functional** — `tests/integration/` or `tests/functional/`
   when a test spans multiple modules or needs real Neovim state across them.
   No formal distinction between the two folders.
-- **ACP / transport-touching tests** — MUST stub `tend.wire.acp_transport`
-  (or any module that opens a real subprocess / network call). No real
-  provider subprocess in tests.
+- **Daemon-touching tests** — the plugin no longer spawns provider
+  subprocesses (the daemon owns them); talk to a scripted daemon over a real
+  or injected socket instead (see `tests/helpers/fake_daemon.lua` and the
+  injected connection/widget in `commands.test.lua`). No real `tendd` or
+  provider process in tests.
 
 ## Important Notes
 

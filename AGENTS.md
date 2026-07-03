@@ -233,9 +233,16 @@ Source of truth: `lua/tend/init.lua` exports.
 - **Config entry** — `setup` (merges config, calls `require("tend.commands").setup`,
   installs the `FileChangedShell` reload autocmd and theme once).
 
-Legacy in-plugin session ops (context adders, `new_session`, `switch_provider`,
-`stop_generation`, `restore_session`) were removed with the session runtime; the
-daemon-backed replacements land in tend-9ee.10.2 / tend-9ee.10.3.
+- **Context attach** — `add_file`/`add_selection`/`add_files_to_context`/
+  `add_selection_or_file_to_context`/`add_current_line_diagnostics`/
+  `add_buffer_diagnostics` populate the daemon session's next-turn context.
+- **Session actions** — `stop_generation` (`agent.cancel`), `switch_provider`
+  (picks the provider for new sessions), `restore_session` /
+  `restore_session_by_id` (reattach to a running daemon session).
+
+All delegate to the daemon `Context`. `new_session` and the old in-nvim
+provider-switch-with-history-replay were not carried over; sessions start via
+`:TendSessionNew` and provider is bound at start.
 
 Cleanup: the daemon owns session lifecycles, so there is no per-tab session
 teardown. Re-running `setup` stops the previous `Context`'s connection

@@ -1206,6 +1206,47 @@ function Context:events()
     self:show_session(session, false)
 end
 
+--- Show the chat widget on the focused session. Backs require("tend").open;
+--- reports (does not auto-create) when no session is focused — sessions are
+--- created via :TendSessionNew on the daemon path.
+--- @param opts tend.ui.ChatWidget.ShowOpts|nil
+function Context:open_widget(opts)
+    local session = self:active_session()
+    if not session then
+        report("tend: no focused session; run :TendSessionNew")
+        return
+    end
+    self:show_session(session, not (opts and opts.focus_prompt == false))
+end
+
+--- Hide the chat widget. Backs require("tend").close; a no-op when the widget
+--- was never opened.
+function Context:close_widget()
+    if self.widget then
+        self.widget:hide()
+    end
+end
+
+--- Toggle the chat widget: hide it when open, else show it on the focused
+--- session. Backs require("tend").toggle.
+--- @param opts tend.ui.ChatWidget.ShowOpts|nil
+function Context:toggle_widget(opts)
+    if self.widget and self.widget:is_open() then
+        self.widget:hide()
+    else
+        self:open_widget(opts)
+    end
+end
+
+--- Rotate the chat widget through the configured layouts. Backs
+--- require("tend").rotate_layout; a no-op when the widget was never opened.
+--- @param layouts tend.UserConfig.Windows.Position[]|nil
+function Context:rotate_layout(layouts)
+    if self.widget then
+        self.widget:rotate_layout(layouts)
+    end
+end
+
 --- @private
 --- Resolve a change set id for a review command: an explicit argument, else a
 --- prompt. (Auto-resolving "the last set" is deferred — the id lives in the

@@ -479,26 +479,22 @@ function ChatWidget:_bind_keymaps()
 end
 
 --- Bind the provider/model/thought switcher keymaps on a buffer. Each switcher
---- targets the active daemon session via an injected control callback. The
---- provider key falls back to the legacy in-nvim path when no daemon callback is
---- given (a legacy widget), so it keeps working until tend-9ee.9 removes it; the
---- model and thought keys stay unbound without their callbacks, so they are not
---- dead keys where the provider offers no such choice.
+--- targets the active daemon session via an injected control callback and is
+--- bound only when its callback is given, so keys stay unbound (not dead) where
+--- the provider offers no such choice.
 --- @param bufnr integer
 function ChatWidget:_bind_controls(bufnr)
     local controls = self.controls
-    BufHelpers.multi_keymap_set(
-        Config.keymaps.widget.switch_provider,
-        bufnr,
-        function()
-            if controls.switch_provider then
+    if controls.switch_provider then
+        BufHelpers.multi_keymap_set(
+            Config.keymaps.widget.switch_provider,
+            bufnr,
+            function()
                 controls.switch_provider()
-            else
-                require("tend").switch_provider()
-            end
-        end,
-        { desc = "Tend: Switch provider" }
-    )
+            end,
+            { desc = "Tend: Switch provider" }
+        )
+    end
     if controls.switch_model then
         BufHelpers.multi_keymap_set(
             Config.keymaps.widget.switch_model,

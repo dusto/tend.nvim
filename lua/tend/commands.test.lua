@@ -802,6 +802,56 @@ describe("tend.commands", function()
         end
     )
 
+    it(
+        "open_widget shows the focused session (require('tend').open)",
+        function()
+            child.lua([[
+            _G.give_session()
+            _G.widget.shows = {}
+            _G.ctx:open_widget()
+        ]])
+            assert.is_true(child.lua_get("#_G.widget.shows >= 1"))
+            assert.is_true(
+                child.lua_get(
+                    "_G.widget.buf_nrs.chat == _G.ctx:active_session().bufnr"
+                )
+            )
+        end
+    )
+
+    it("open_widget without a focused session reports", function()
+        child.lua([[
+            _G.ctx:ensure_widget()
+            _G.widget.shows = {}
+            _G.ctx:open_widget()
+        ]])
+        assert.equal(0, child.lua_get("#_G.widget.shows"))
+        assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
+    end)
+
+    it("close_widget hides the widget (require('tend').close)", function()
+        child.lua([[
+            _G.give_session()
+            _G.ctx:open_widget()
+            _G.ctx:close_widget()
+        ]])
+        assert.equal(1, child.lua_get("_G.widget.hides"))
+    end)
+
+    it("toggle_widget shows then hides (require('tend').toggle)", function()
+        child.lua([[
+            _G.give_session()
+            -- give_session shows the widget; start from a known-closed state.
+            _G.ctx:close_widget()
+            _G.ctx:toggle_widget() -- closed -> show
+            _G.after_show_open = _G.widget:is_open()
+            _G.ctx:toggle_widget() -- open -> hide
+            _G.after_hide_open = _G.widget:is_open()
+        ]])
+        assert.is_true(child.lua_get("_G.after_show_open"))
+        assert.is_false(child.lua_get("_G.after_hide_open"))
+    end)
+
     it("the chat input submits a prompt to the focused session", function()
         child.lua([[
             _G.give_session()

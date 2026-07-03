@@ -1043,34 +1043,21 @@ describe("tend.ui.ChatWidget", function()
             end
         )
 
-        it(
-            "provider keymap falls back to the legacy path without a control",
-            function()
-                vim.cmd("tabnew")
-                tab_page_id = vim.api.nvim_get_current_tabpage()
+        it("leaves the provider keymap unbound without its control", function()
+            vim.cmd("tabnew")
+            tab_page_id = vim.api.nvim_get_current_tabpage()
 
-                -- A legacy widget (no controls): the provider key still works,
-                -- routed to the in-nvim path until tend-9ee.9 removes it.
-                local tend = require("tend")
-                local original = tend.switch_provider
-                local called = 0
-                tend.switch_provider = function()
-                    called = called + 1
-                end
+            -- No controls: the provider key is not a dead binding (the
+            -- in-nvim fallback is gone; the daemon path always injects it).
+            widget = ChatWidget:new(
+                tab_page_id,
+                spy.new(function() end) --[[@as function]]
+            )
 
-                widget = ChatWidget:new(
-                    tab_page_id,
-                    spy.new(function() end) --[[@as function]]
-                )
-
-                local ok =
-                    invoke_keymap(widget.buf_nrs.chat, "Tend: Switch provider")
-                tend.switch_provider = original
-
-                assert.is_true(ok)
-                assert.equal(1, called)
-            end
-        )
+            assert.is_false(
+                invoke_keymap(widget.buf_nrs.chat, "Tend: Switch provider")
+            )
+        end)
     end)
 
     describe("hidden chat window lifecycle", function()

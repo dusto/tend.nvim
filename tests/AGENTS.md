@@ -67,10 +67,8 @@ docs), say so explicitly in the PR description.
 
 ```text
 lua/tend/
-  ├── init.lua
-  ├── init.test.lua
-  ├── session_manager.lua
-  ├── session_manager.test.lua
+  ├── commands.lua
+  ├── commands.test.lua
   └── utils/
       ├── logger.lua
       └── logger.test.lua

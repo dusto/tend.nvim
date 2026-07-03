@@ -13,8 +13,8 @@ Hard rules and traps. Read code before changing behavior.
 ## Topology
 
 ```text
-SessionManager (per tab)
-└── ChatWidget (per tab)  owns buffers + windows + autocmds
+commands.Context (connection-scoped)  owns the daemon session state
+└── ChatWidget (one, bound to a tabpage)  owns buffers + windows + autocmds
     ├── WidgetLayout      open/close/resize panels, applies PANEL_WINDOW_OPTS
     ├── _hidden_chat_winid  float keeping chat buffer attached while widget
     │                       hidden — managed by ChatWidget._hidden_chat_winid

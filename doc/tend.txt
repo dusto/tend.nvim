@@ -388,128 +388,30 @@ headers ~
 ==============================================================================
 USAGE                                                    *tend-usage*
 
-All functions are accessed via `require("tend")`.
+The chat widget lifecycle is driven via `require("tend")`. Sessions
+themselves are owned by the daemon: start, attach, switch, prompt, and
+task/approval/diff operations are the `:Tend*` commands under
+|tend-daemon|, not Lua functions here. These `require("tend")` entries act
+on the daemon's focused session's widget; they report (they do not
+auto-create a session) when none is focused — start one with
+|:TendSessionNew|.
 
                                                       *tend.toggle()*
 tend.toggle({opts})
-  Toggle the chat sidebar for the current tabpage.
+  Toggle the chat widget on the focused session.
 
   Parameters: ~
     {opts}  (table|nil)  Optional fields:
-      `auto_add_to_context`  (boolean)  Add selection/file on open.
-                                        Default: `true`.
-      `focus_prompt`         (boolean)  Move cursor to prompt.
-                                        Default: `true`.
+      `focus_prompt`  (boolean)  Move cursor to prompt. Default: `true`.
 
                                                         *tend.open()*
 tend.open({opts})
-  Open the chat sidebar. Keeps it open if already visible.
-  Accepts the same {opts} as |tend.toggle()|.
+  Open the chat widget on the focused session. Keeps it open if already
+  visible. Accepts the same {opts} as |tend.toggle()|.
 
                                                        *tend.close()*
 tend.close()
-  Close the chat sidebar for the current tabpage.
-
-                                               *tend.add_selection()*
-tend.add_selection({opts})
-  Add the current visual selection to the chat context and open
-  the sidebar.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional. `focus_prompt` (boolean).
-
-                                                   *tend.add_file()*
-tend.add_file({opts})
-  Add the current file to the chat context and open the sidebar.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional. `focus_prompt` (boolean).
-
-                                *tend.add_selection_or_file_to_context()*
-tend.add_selection_or_file_to_context({opts})
-  Add the visual selection if active, otherwise the current file.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional. `focus_prompt` (boolean).
-
-                                        *tend.add_files_to_context()*
-tend.add_files_to_context({opts})
-  Add a list of file paths or buffer numbers to context.
-
-  Parameters: ~
-    {opts}  (table)  Required fields:
-      `files`         (table)    List of file paths (strings) or
-                                 buffer numbers (integers).
-      `focus_prompt`  (boolean)  Optional. Default: `true`.
-
->lua
-  require("tend").add_files_to_context({
-    files = { "src/main.lua", "src/utils.lua" },
-  })
-
-  -- By buffer number
-  require("tend").add_files_to_context({
-    files = { 1, 5 },
-    focus_prompt = false,
-  })
-<
-
-                                  *tend.add_current_line_diagnostics()*
-tend.add_current_line_diagnostics({opts})
-  Add diagnostics at the current cursor line to context.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional. `focus_prompt` (boolean).
-
-                                      *tend.add_buffer_diagnostics()*
-tend.add_buffer_diagnostics({opts})
-  Add all diagnostics from the current buffer to context.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional. `focus_prompt` (boolean).
-
-                                                 *tend.new_session()*
-tend.new_session({opts})
-  Destroy the current session and start a new one.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional fields:
-      `provider`              (string)   Switch provider for the
-                                         new session.
-      `auto_add_to_context`   (boolean)  Default: `true`.
-
-                                     *tend.new_session_with_provider()*
-tend.new_session_with_provider({opts})
-  Show a provider picker, then create a new session with the
-  selected provider.
-
-                                             *tend.switch_provider()*
-tend.switch_provider({opts})
-  Switch to a different ACP provider mid-session. Chat history
-  and context are preserved.
-
-  Parameters: ~
-    {opts}  (table|nil)  Optional fields:
-      `provider`  (string)  Provider name. If omitted, shows a
-                            picker.
-
-                                             *tend.stop_generation()*
-tend.stop_generation()
-  Stop the agent's current generation or tool execution. The
-  session remains active and ready for the next prompt.
-
-                                             *tend.restore_session()*
-tend.restore_session()
-  Show the provider's session picker to restore a previous
-  session. Sessions are interchangeable between Neovim and the
-  terminal.
-
-                                             *tend.restore_session_by_id()*
-tend.restore_session_by_id({session_id})
-  Restore a previous session by its ID.
-
-  Parameters: ~
-    {session_id}  (string)  Session ID to restore.
+  Close the chat widget.
 
                                               *tend.rotate_layout()*
 tend.rotate_layout({layouts})

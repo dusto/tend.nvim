@@ -7,13 +7,15 @@ blocks, approvals/permissions, and diffs, and forwards editor-local actions. The
 the event bus, and approvals, over a bidirectional JSON-RPC 2.0 Unix socket. The
 daemon and the wire contract live in [dusto/tend](https://github.com/dusto/tend).
 
-> **Architecture in transition.** The current code still embeds an in-plugin ACP +
-> session runtime (`lua/tend/acp`, `session_manager`/`session_registry`) inherited
-> from the upstream fork. That runtime is being **replaced** by a thin daemon
-> JSON-RPC client (the daemon becomes the source of truth), porting behavior piece
-> by piece. Until then, the ACP / session / "Multi-Tabpage" sections below describe
-> the **present** code accurately — read them for current work, but expect them to
-> change as the client lands. The chat/diff/tool-call **UI primitives are kept**.
+> **Architecture in transition.** The daemon now owns sessions: the in-plugin
+> session runtime (`session_manager`/`session_registry`/`session_restore`) has
+> been removed and the plugin drives the daemon over JSON-RPC (`lua/tend/commands.lua`,
+> the connection-scoped `Context`, is the client). The chat/diff/tool-call **UI
+> primitives are kept** and are re-pointed at the daemon. One legacy piece
+> remains: the in-plugin ACP transport/provider layer under `lua/tend/acp` (plus
+> its `CONTEXT.md`/`lua/tend/acp/AGENTS.md`, which still describe the old
+> `SessionManager` coupling); it is dormant (nothing spawns it) and is removed in
+> tend-9ee.9.
 
 ## Nested instructions
 
@@ -99,20 +101,23 @@ implementations expecting the user to fill gaps.
 
 ## CRITICAL: Multi-Tabpage Architecture
 
-**EVERY FEATURE MUST BE MULTI-TAB SAFE.** This plugin supports one session
-instance per tabpage.
+**EVERY FEATURE MUST BE MULTI-TAB SAFE.** The plugin's UI primitives run in
+buffers, windows, and tabpages, so they must isolate their state per scope even
+though the daemon owns sessions.
 
 ### Architecture overview
 
-- `SessionRegistry` maps `tab_page_id -> SessionManager`
-- 1 ACP provider instance (single subprocess, shared across tabpages, managed by
-  `AgentInstance`). See ADR 0004.
-- 1 ACP session ID per tabpage (ACP supports multiple but only one is active per
-  tab)
-- 1 `SessionManager` + 1 `ChatWidget` per tabpage (full UI isolation)
+- The daemon owns sessions; the plugin holds one connection-scoped command
+  `Context` (`lua/tend/commands.lua`, `require("tend.commands").current()`) — a
+  singleton, not per-tab, since the editor is one client of the daemon.
+- One `ChatWidget`, created lazily and bound to the tabpage where it is first
+  shown (`self.tab_page_id`). It renders whichever daemon session is focused; a
+  per-session chat buffer is swapped into its chat window on switch.
+- The daemon (not this plugin) owns ACP provider processes and session ids.
 
-Each tabpage has its own: ACP session ID, chat widget (buffers, windows, state),
-status animation, permission manager, file list, code selection.
+Even with a single widget, features must respect scope: buffers/windows/extmarks
+are buffer- or window-scoped and a user can move the widget or open editor
+windows across tabpages, so the rules below still apply to every UI primitive.
 
 ### Implementation requirements
 
@@ -187,76 +192,56 @@ status animation, permission manager, file list, code selection.
 
 ## Public API and call chain
 
-`lua/tend/init.lua` is the public surface. Anything reached through the call
-chain inherits the chain's guarantees. Direct access to deeper modules bypasses
-them.
+There are two entry surfaces:
 
-Every public entry in `init.lua` calls
-`SessionRegistry.get_session_for_tab_page(tab_id_or_nil, callback)`. The
-callback is the only safe place to touch session/widget state.
+- **`:Tend*` user commands** — the primary interface, registered by
+  `lua/tend/commands.lua` on `setup`. These drive the daemon: connect,
+  workspace/task/session/provider, chat/prompt, approvals, and diff review. See
+  |tend-daemon| in `doc/tend.txt` and the `Context` methods in `commands.lua`.
+- **`lua/tend/init.lua`** — a thin Lua surface for the chat widget lifecycle
+  (`open`/`close`/`toggle`/`rotate_layout`) plus `setup`. Each lifecycle entry
+  delegates to the connection-scoped command `Context`:
 
 ```lua
-SessionRegistry.get_session_for_tab_page(nil, function(session)
-    session.widget:show()
-end)
+local function with_context(fn)
+    local ctx = require("tend.commands").current()
+    if not ctx then -- setup() has not run
+        Logger.notify("tend: not set up; call require('tend').setup() first")
+        return
+    end
+    fn(ctx)
+end
+-- Tend.toggle -> with_context(function(ctx) ctx:toggle_widget(opts) end)
 ```
 
-```mermaid
-flowchart TD
-    Caller["public entry in init.lua"]
-    Entry["SessionRegistry.get_session_for_tab_page(tab_id_or_nil, cb?)"]
-    HasCb{"callback provided?"}
-    Resolve["resolve tabpage<br/>(nil -> current tab)"]
-    Provider{"ACP provider configured?"}
-    ReturnNil["return nil"]
-    Wrap["pcall(callback, session)"]
-    Touch["touch session/widget state safely"]
-    Notify["errors notified, not raised"]
-    Bare["bare-return form<br/>returns session or nil"]
+The `Context` (a single `current` per Neovim instance) owns the connection, the
+tracked sessions, and the one `ChatWidget`. Widget-lifecycle methods act on the
+daemon's *focused* session; they report (they do **not** auto-create a session)
+when none is focused — sessions start via `:TendSessionNew`.
 
-    Caller --> Entry --> HasCb
-    HasCb -->|yes| Resolve --> Wrap
-    Wrap --> Touch
-    Wrap --> Notify
-    HasCb -->|no, bare| Provider
-    Provider -->|yes| Bare
-    Provider -->|no| ReturnNil
-```
+Guarantees:
 
-Guarantees inside the callback:
+- Daemon requests go through `Context:call`, which reports RPC errors via the
+  Logger rather than raising; successes reach the callback.
+- No session is created implicitly. `require("tend").open/toggle` with no
+  focused session report and return.
 
-- Tabpage and session resolved against the requested tab.
-- Callback wrapped in `pcall`; errors get notified, not raised.
+### init.lua public entries
 
-Outside the callback:
+Source of truth: `lua/tend/init.lua` exports.
 
-- Bare-return form (no callback) may return `nil` when no ACP provider is
-  configured.
-- Past a `vim.schedule` boundary, re-enter via the callback form with
-  `self.tab_page_id` (or check `nvim_tabpage_is_valid(self.tab_page_id)`). The
-  `nil` form resolves to whatever tab is current then, not the original.
+- **Widget lifecycle** — `open`/`close`/`toggle`/`rotate_layout`, delegating to
+  `Context:open_widget`/`close_widget`/`toggle_widget`/`rotate_layout`.
+- **Config entry** — `setup` (merges config, calls `require("tend.commands").setup`,
+  installs the `FileChangedShell` reload autocmd and theme once).
 
-### Public entries (overview)
+Legacy in-plugin session ops (context adders, `new_session`, `switch_provider`,
+`stop_generation`, `restore_session`) were removed with the session runtime; the
+daemon-backed replacements land in tend-9ee.10.2 / tend-9ee.10.3.
 
-Source of truth: `lua/tend/init.lua` exports. Grouped:
-
-- **Widget lifecycle** — open/close/toggle/rotate_layout.
-- **Context attach** — selection, file(s), diagnostics adders.
-- **Session ops** — new/restore/stop.
-- **Provider switch** — `switch_provider`. UI history replay only; the new
-  provider receives no prior LLM context (see `acp/AGENTS.md`).
-- **Config entry** — `setup`.
-
-Callback-form entries go through `SessionRegistry.get_session_for_tab_page`.
-`new_session` and `new_session_with_provider` are bare-return.
-
-Cleanup path:
-
-```mermaid
-flowchart LR
-    A[TabClosed autocmd] --> B["SessionRegistry.destroy_session(tab_page_id)"]
-    B --> C["SessionManager:destroy"]
-```
+Cleanup: the daemon owns session lifecycles, so there is no per-tab session
+teardown. Re-running `setup` stops the previous `Context`'s connection
+(`Context:dispose`) before building the new one.
 
 ### Logger
 

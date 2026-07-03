@@ -1,5 +1,13 @@
 # Provider system
 
+> **STALE — pending removal (tend-9ee.9).** The in-plugin session runtime this
+> document is written against (`SessionManager`/`SessionRegistry`,
+> `init.lua::apply_provider_switch`) has been removed; the daemon now owns ACP,
+> sessions, and providers. Everything under `lua/tend/acp` is dormant (nothing
+> spawns it) and is deleted in tend-9ee.9, along with this file. Do not follow
+> its `SessionManager`/`init.lua` references as current; they describe code that
+> no longer exists.
+
 ## ACP providers (Agent Client Protocol)
 
 This plugin spawns **external CLI tools** as subprocesses and communicates via

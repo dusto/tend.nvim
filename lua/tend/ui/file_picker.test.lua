@@ -70,6 +70,12 @@ describe("FilePicker:scan_files", function()
             FilePicker.CMD_FD[1] = "echo"
             FilePicker.CMD_GIT[1] = "echo"
 
+            -- A stubbed vim.fn.system never updates v:shell_error, and scan_files
+            -- treats a nonzero shell_error as a command failure. Normalize it to 0
+            -- with a real successful command so this test does not inherit a
+            -- nonzero value leaked by whichever test ran before it.
+            vim.fn.system({ "true" })
+
             system_stub = spy.stub(vim.fn, "system")
             system_stub:invokes(function(_cmd)
                 -- First call returns empty (simulates failure)

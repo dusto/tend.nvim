@@ -167,7 +167,7 @@ end
 --- get_winid is called when the buffer is not already visible in any window.
 --- It must return a window that is displaying bufnr (i.e. call
 --- nvim_win_set_buf before returning), as open_split_view runs :diffthis
---- on the returned window. See session_manager.lua get_winid for reference.
+--- on the returned window.
 --- @param abs_path string
 --- @param get_winid fun(bufnr: number): number|nil
 --- @return number|nil bufnr

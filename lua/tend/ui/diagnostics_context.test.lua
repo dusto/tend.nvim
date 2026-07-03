@@ -12,7 +12,7 @@ describe("tend.ui.DiagnosticsContext", function()
                 message = "Use <tag> & escape me",
                 source = "lua_ls",
                 code = "unused-local",
-                file_path = "lua/tend/session_manager.lua",
+                file_path = "lua/tend/commands.lua",
             },
         }
 
@@ -30,7 +30,7 @@ describe("tend.ui.DiagnosticsContext", function()
         assert.truthy(prompt_text:find("<column>5</column>", 1, true))
         assert.truthy(
             result.summary_lines[1]:find(
-                "[WARN] lua/tend/session_manager.lua:10:5",
+                "[WARN] lua/tend/commands.lua:10:5",
                 1,
                 true
             )

@@ -4,6 +4,16 @@ Domain glossary for tend.nvim. Defines terms that are overloaded, ambiguous,
 or unique to this project. Not a spec. Not a design doc. Implementation
 details belong in `AGENTS.md` (rules) or `docs/adr/` (decisions).
 
+> **Much of this glossary predates the daemon migration.** Terms for the
+> in-plugin ACP + session runtime — **AgentInstance**, **ACPClient**,
+> **ACPTransport**, **Subscriber**, **ACP Session**, **AgentConfigOptions**,
+> the legacy **SlashCommands**/**Hooks**/**Reconnect**, and the
+> **Relationships**/**Example dialogue** built on them — describe code under
+> `lua/tend/acp` that is dormant and removed in tend-9ee.9. **SessionManager**
+> and **SessionRegistry** are already gone (tend-9ee.10): the daemon owns
+> sessions and the plugin drives it via the connection-scoped `commands.Context`
+> (`require("tend.commands").current()`).
+
 ## Language
 
 ### Process and protocol
@@ -46,28 +56,32 @@ A protocol-level session id, opaque string issued by the **Provider** via
 per **Tabpage**.
 _Avoid_: bare "session" when discussing protocol traffic.
 
-**SessionManager**:
-The per-**Tabpage** Lua orchestrator. Owns the **ChatWidget**, holds the active
-**ACP Session** id, routes `session/update` events to the **MessageWriter**,
-**PermissionManager**, and **ChatHistory**.
-_Avoid_: "the session" — say SessionManager.
+**SessionManager** (removed, tend-9ee.10):
+Was the per-**Tabpage** Lua orchestrator owning the **ChatWidget** and the
+active **ACP Session**. Its role is now the daemon's; the plugin holds a
+connection-scoped `commands.Context` that tracks daemon sessions and owns the
+one **ChatWidget**.
 
-**SessionRegistry**:
-The module-level singleton mapping `tab_page_id -> SessionManager`. The only
-sanctioned entry point from `init.lua`.
+**SessionRegistry** (removed, tend-9ee.10):
+Was the module-level `tab_page_id -> SessionManager` map. Gone with the
+in-plugin session runtime; `require("tend.commands").current()` is the single
+context now.
 
 ### Tabpage scope
 
 **Tabpage**:
-The Neovim tab. The isolation unit for this plugin: one **SessionManager**,
-one **ChatWidget**, one active **ACP Session** per tab.
+The Neovim tab. Buffers, windows, and extmarks are tab/buffer-scoped, so UI
+primitives must stay tab-safe; but session ownership is no longer per-tab (the
+daemon owns sessions; the **ChatWidget** is a singleton bound to one tab).
 _Avoid_: "tab" (ambiguous with terminal tabs and chat-buffer tabs).
 
 ### UI surface
 
 **ChatWidget**:
-The per-**Tabpage** UI container. Owns five buffers (see **ChatWidget buffers**),
-panel windows, autocmds, and the **MessageWriter**.
+The chat UI container — a singleton bound to one **Tabpage** (created by
+`commands.Context`), not one per tab. Owns its buffers (see **ChatWidget
+buffers**), panel windows, and autocmds; it renders whichever daemon session is
+focused.
 
 **ChatWidget buffers**:
 The five buffers held on `ChatWidget.buf_nrs`:
@@ -190,12 +204,13 @@ public `init.lua` entry — selectors open from configurable keymaps
 Legacy-path holders inside `AgentConfigOptions`. Used when a provider sends
 `modes`/`models` instead of unified `configOptions`. Same per-tab scope.
 
-**SlashCommands**:
-Per-tab input-buffer completion. Command list arrives via
-`session/update` `available_commands_update` and is augmented locally: the
-plugin filters out `clear` and auto-injects `/new` if absent. Only `/new` is
-intercepted on submit (calls `new_session`); every other slash-prefixed line
-is sent verbatim to the **Provider**.
+**SlashCommands** (legacy `lua/tend/acp/slash_commands.lua`, removed in
+tend-9ee.9):
+Was per-tab input-buffer completion off `available_commands_update`, injecting
+`/new` and intercepting it on submit. On the daemon path this is replaced by
+`lua/tend/ui/slash_complete.lua` + `commands.Context`: the daemon supplies the
+merged command set (`slash.list`/`slash_commands_updated`), completes arguments
+via `slash.complete`, and dispatches submits via `slash.invoke`.
 
 ### Hooks
 
@@ -221,14 +236,19 @@ default.
 
 ## Relationships
 
-- A **SessionRegistry** maps each **Tabpage** to one **SessionManager**.
-- A **SessionManager** owns one **ChatWidget** and references one **ACP
-  Session** id on one **AgentInstance**.
-- One **AgentInstance** per **Provider** name, shared across **Tabpages**.
+The first group described the removed in-plugin runtime (see the banner at the
+top); on the daemon path the daemon owns sessions and providers, and the
+plugin holds one `commands.Context` that owns the one **ChatWidget**:
+
+- The daemon owns **ACP Session**s and **Provider** processes; the plugin's
+  `commands.Context` tracks them and owns the one **ChatWidget** (bound to a
+  **Tabpage**), which renders whichever session is focused.
+
+The rendering relationships below are unchanged (kept UI primitives):
+
 - A **ChatWidget** owns one **MessageWriter** which owns many **Tool Call
   Blocks** keyed by tool call id.
-- A **Permission Request** belongs to exactly one **Tool Call** (by id) on
-  exactly one **SessionManager**.
+- A **Permission Request** belongs to exactly one **Tool Call** (by id).
 - **Tool Call Block**, **ToolCallFold**, **ToolCallDiff**, **ToolBlockBorder**
   all describe the same rendered block from different angles
   (content/folding/diff/borders).

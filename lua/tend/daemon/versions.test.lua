@@ -23,19 +23,20 @@ describe("tend.daemon.versions", function()
     it(
         "requires the daemon version of the newest contract it relies on",
         function()
-            -- Attaching editor context relies on agent.prompt content blocks
-            -- (plugin_to_daemon 0.15.0); a daemon that predates it (e.g. 0.14.0,
-            -- which had slash.invoke but no content blocks) must be rejected at
-            -- the handshake, not fail later when the first turn carries context.
+            -- The thought-level switcher relies on session.set_thought_level
+            -- (plugin_to_daemon 0.16.0); a daemon that predates it (e.g. 0.15.0,
+            -- which had agent.prompt content blocks but no thought-level axis)
+            -- must be rejected at the handshake, not fail later when the switcher
+            -- first runs the missing method.
             assert.is_false(Versions.satisfies({
-                plugin_to_daemon = "0.14.0",
-                daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.6.0",
-            }))
-            assert.is_true(Versions.satisfies({
                 plugin_to_daemon = "0.15.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.6.0",
+                daemon_to_client = "0.7.0",
+            }))
+            assert.is_true(Versions.satisfies({
+                plugin_to_daemon = "0.16.0",
+                daemon_to_editor = "0.2.0",
+                daemon_to_client = "0.7.0",
             }))
         end
     )
@@ -43,13 +44,13 @@ describe("tend.daemon.versions", function()
     it(
         "requires the daemon->client version for the command-set event",
         function()
-            -- The completion source consumes slash_commands_updated (daemon_to_client
-            -- 0.6.0); an older event contract must be rejected at the handshake.
+            -- The header consumes agent_thought_level_updated (daemon_to_client
+            -- 0.7.0); an older event contract must be rejected at the handshake.
             -- plugin_to_daemon is at the pin here so only daemon_to_client fails.
             assert.is_false(Versions.satisfies({
-                plugin_to_daemon = "0.15.0",
+                plugin_to_daemon = "0.16.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.5.0",
+                daemon_to_client = "0.6.0",
             }))
         end
     )

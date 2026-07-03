@@ -1351,6 +1351,12 @@ describe("tend.commands", function()
                         { id = "default", name = "Default" },
                         { id = "think", name = "Think hard" },
                     },
+                    current_thought_level_id = "medium",
+                    available_thought_levels = {
+                        { id = "low", name = "Low" },
+                        { id = "medium", name = "Medium" },
+                        { id = "high", name = "High" },
+                    },
                 },
             } } }
             _G.calls = {}
@@ -1407,13 +1413,13 @@ describe("tend.commands", function()
     end)
 
     it(
-        "change_thought_level lists the session's modes and sets the chosen one",
+        "change_mode lists the session's modes and sets the chosen one",
         function()
             give_session_with_options()
             child.lua([[
                 _G.replies["session.set_mode"] = { result = { current_mode_id = "think" } }
                 _G.ui_choice = 2 -- Think hard
-                _G.widget.controls.change_thought_level()
+                _G.widget.controls.change_mode()
             ]])
             local sent = calls()
             assert.equal("session.list", sent[1].method)
@@ -1425,13 +1431,62 @@ describe("tend.commands", function()
         end
     )
 
+    it("change_mode reports when the provider offers no modes", function()
+        child.lua([[
+                _G.give_session()
+                _G.replies["session.list"] = { result = { sessions = {
+                    { session_id = "ses-1", available_modes = {} },
+                } } }
+                _G.calls = {}
+                _G.widget.controls.change_mode()
+            ]])
+        assert.is_not_nil(last_notice().msg:find("no modes", 1, true))
+    end)
+
     it(
-        "change_thought_level reports when the provider offers no modes",
+        "change_thought_level lists the session's thought levels and sets the chosen one",
+        function()
+            give_session_with_options()
+            child.lua([[
+                _G.replies["session.set_thought_level"] =
+                    { result = { current_thought_level_id = "high" } }
+                _G.ui_choice = 3 -- High
+                _G.widget.controls.change_thought_level()
+            ]])
+            local sent = calls()
+            assert.equal("session.list", sent[1].method)
+            assert.equal("session.set_thought_level", sent[2].method)
+            assert.same(
+                { session_id = "ses-1", thought_level_id = "high" },
+                sent[2].params
+            )
+        end
+    )
+
+    it(
+        "change_thought_level reflects the new level in the chat header",
+        function()
+            give_session_with_options()
+            child.lua([[
+            _G.replies["session.set_thought_level"] =
+                { result = { current_thought_level_id = "high" } }
+            _G.ui_choice = 3
+            _G.widget.controls.change_thought_level()
+        ]])
+            local headers = child.lua_get("_G.widget.headers")
+            local last = headers[#headers]
+            assert.equal("chat", last.window)
+            assert.is_not_nil(last.context:find("high", 1, true))
+        end
+    )
+
+    it(
+        "change_thought_level reports when the provider offers no thought levels",
         function()
             child.lua([[
                 _G.give_session()
                 _G.replies["session.list"] = { result = { sessions = {
-                    { session_id = "ses-1", available_modes = {} },
+                    { session_id = "ses-1", available_thought_levels = {} },
                 } } }
                 _G.calls = {}
                 _G.widget.controls.change_thought_level()
@@ -1439,6 +1494,30 @@ describe("tend.commands", function()
             assert.is_not_nil(
                 last_notice().msg:find("thought/reasoning", 1, true)
             )
+        end
+    )
+
+    it(
+        "agent_thought_level_updated keeps the header live without a set call",
+        function()
+            -- give_session tracks and focuses ses-1; an agent-driven thought-level
+            -- event on its stream must update the header with no set call.
+            child.lua([[
+                _G.give_session()
+                _G.calls = {}
+                _G.ctx:apply_session_updates(_G.ctx.sessions["ses-1"], {
+                    type = "agent_thought_level_updated",
+                    payload = { session_id = "ses-1", current_thought_level_id = "low" },
+                })
+            ]])
+            assert.same({}, calls())
+            assert.equal(
+                "low",
+                child.lua_get("_G.ctx.sessions['ses-1'].thought_level_id")
+            )
+            local headers = child.lua_get("_G.widget.headers")
+            local last = headers[#headers]
+            assert.is_not_nil(last.context:find("low", 1, true))
         end
     )
 

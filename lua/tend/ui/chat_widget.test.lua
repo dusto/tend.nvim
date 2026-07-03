@@ -938,48 +938,63 @@ describe("tend.ui.ChatWidget", function()
             end
         )
 
-        it("fires the provider/model/thought controls from the chat", function()
-            vim.cmd("tabnew")
-            tab_page_id = vim.api.nvim_get_current_tabpage()
-
-            local fired = { provider = 0, model = 0, thought = 0 }
-            widget = ChatWidget:new(
-                tab_page_id,
-                spy.new(function() end) --[[@as function]],
-                nil,
-                {
-                    switch_provider = function()
-                        fired.provider = fired.provider + 1
-                    end,
-                    switch_model = function()
-                        fired.model = fired.model + 1
-                    end,
-                    change_thought_level = function()
-                        fired.thought = fired.thought + 1
-                    end,
-                }
-            )
-
-            assert.is_true(
-                invoke_keymap(widget.buf_nrs.chat, "Tend: Switch provider")
-            )
-            assert.is_true(
-                invoke_keymap(widget.buf_nrs.chat, "Tend: Switch model")
-            )
-            assert.is_true(
-                invoke_keymap(widget.buf_nrs.chat, "Tend: Change thought level")
-            )
-            assert.same({ provider = 1, model = 1, thought = 1 }, fired)
-        end)
-
         it(
-            "leaves model/thought keymaps unbound without their controls",
+            "fires the provider/model/mode/thought controls from the chat",
             function()
                 vim.cmd("tabnew")
                 tab_page_id = vim.api.nvim_get_current_tabpage()
 
-                -- Only the provider control is given (the daemon offers no model
-                -- or thought choice): those keys must not be dead bindings.
+                local fired = { provider = 0, model = 0, mode = 0, thought = 0 }
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]],
+                    nil,
+                    {
+                        switch_provider = function()
+                            fired.provider = fired.provider + 1
+                        end,
+                        switch_model = function()
+                            fired.model = fired.model + 1
+                        end,
+                        change_mode = function()
+                            fired.mode = fired.mode + 1
+                        end,
+                        change_thought_level = function()
+                            fired.thought = fired.thought + 1
+                        end,
+                    }
+                )
+
+                assert.is_true(
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Switch provider")
+                )
+                assert.is_true(
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Switch model")
+                )
+                assert.is_true(
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Change mode")
+                )
+                assert.is_true(
+                    invoke_keymap(
+                        widget.buf_nrs.chat,
+                        "Tend: Change thought level"
+                    )
+                )
+                assert.same(
+                    { provider = 1, model = 1, mode = 1, thought = 1 },
+                    fired
+                )
+            end
+        )
+
+        it(
+            "leaves model/mode/thought keymaps unbound without their controls",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                -- Only the provider control is given (the daemon offers no model,
+                -- mode, or thought choice): those keys must not be dead bindings.
                 widget = ChatWidget:new(
                     tab_page_id,
                     spy.new(function() end) --[[@as function]],
@@ -989,6 +1004,9 @@ describe("tend.ui.ChatWidget", function()
 
                 assert.is_false(
                     invoke_keymap(widget.buf_nrs.chat, "Tend: Switch model")
+                )
+                assert.is_false(
+                    invoke_keymap(widget.buf_nrs.chat, "Tend: Change mode")
                 )
                 assert.is_false(
                     invoke_keymap(

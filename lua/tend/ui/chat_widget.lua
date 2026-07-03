@@ -61,6 +61,7 @@ ChatWidget.__index = ChatWidget
 --- @class tend.ui.ChatWidget.Controls
 --- @field switch_provider? fun()
 --- @field switch_model? fun()
+--- @field change_mode? fun()
 --- @field change_thought_level? fun()
 
 --- @param tab_page_id integer
@@ -503,6 +504,16 @@ function ChatWidget:_bind_controls(bufnr)
                 controls.switch_model()
             end,
             { desc = "Tend: Switch model" }
+        )
+    end
+    if controls.change_mode then
+        BufHelpers.multi_keymap_set(
+            Config.keymaps.widget.change_mode,
+            bufnr,
+            function()
+                controls.change_mode()
+            end,
+            { desc = "Tend: Change mode" }
         )
     end
     if controls.change_thought_level then

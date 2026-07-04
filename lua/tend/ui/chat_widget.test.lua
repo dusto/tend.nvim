@@ -1086,6 +1086,77 @@ describe("tend.ui.ChatWidget", function()
         )
 
         it(
+            "pick_file inserts the chosen @path and attaches it via on_pick",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                local picked = {}
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]],
+                    nil,
+                    nil,
+                    nil,
+                    {
+                        on_pick = function(path)
+                            table.insert(picked, path)
+                        end,
+                    }
+                )
+                widget:show() -- creates the input window the picker inserts into
+
+                -- Deterministically pick the first scanned workspace file.
+                local chosen
+                local select_stub = spy.stub(vim.ui, "select")
+                select_stub:invokes(function(items, _, on_choice)
+                    chosen = items[1]
+                    on_choice(items[1], 1)
+                end)
+
+                local ok = invoke_keymap(
+                    widget.buf_nrs.input,
+                    "Tend: Attach file (picker)"
+                )
+
+                select_stub:revert()
+
+                assert.is_true(ok)
+                assert.is_not_nil(chosen)
+                -- The file (path without @) is attached to the next turn,
+                assert.same({ (chosen.word:gsub("^@", "")) }, picked)
+                -- and the @path reference text lands in the prompt.
+                local line = vim.api.nvim_buf_get_lines(
+                    widget.buf_nrs.input,
+                    0,
+                    1,
+                    false
+                )[1]
+                assert.is_not_nil(line:find(chosen.word, 1, true))
+            end
+        )
+
+        it(
+            "does not bind the file picker keymap without a files source",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]]
+                )
+
+                assert.is_false(
+                    invoke_keymap(
+                        widget.buf_nrs.input,
+                        "Tend: Attach file (picker)"
+                    )
+                )
+            end
+        )
+
+        it(
             "leaves the input completefunc unset without a slash source",
             function()
                 vim.cmd("tabnew")

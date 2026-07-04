@@ -342,6 +342,8 @@ local ConfigDefault = {
                     mode = { "i" },
                 },
             },
+
+            pick_file = "<localLeader>f",
         },
 
         --- Keys bindings for chat buffer navigation

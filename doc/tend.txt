@@ -404,6 +404,8 @@ These keybindings are automatically set in Tend buffers:
   <CR>                   n       Submit prompt
   <C-s>                  n/v/i   Submit prompt
   <Tab>                  i       Accept file completion
+  <localLeader>f         n       Pick a workspace file (vim.ui.select);
+                                 inserts @path and attaches it
   <localLeader>p         n       Paste image from clipboard
   <C-v>                  i       Paste image from clipboard
   <localLeader>s         n       Pick the ACP provider for new sessions
@@ -463,6 +465,7 @@ Override default keybindings via the `keymaps` config option:
         accept_completion = {
           { "<Tab>", mode = { "i" } },
         },
+        pick_file = "<localLeader>f",
       },
       chat = {
         next_heading = "]]",
@@ -546,6 +549,12 @@ the next prompt turn's context — the same content block as
 `@path` text. Reference multiple files:
 `@file1.lua @file2.lua`. Uses `rg`, `fd`, `git ls-files`, or Lua globs
 as fallback.
+
+Alternatively, press `<localLeader>f` in the prompt to open the file
+list through `vim.ui.select` — so your own picker (telescope, fzf-lua,
+snacks, mini.pick, dressing, ...) is used — then the chosen `@path` is
+inserted and attached the same way. Configurable via
+`keymaps.prompt.pick_file`.
 
 Image and screenshot support ~
                                                      *tend-images*

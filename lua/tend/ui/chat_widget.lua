@@ -455,6 +455,21 @@ function ChatWidget:_bind_keymaps()
         { desc = "Tend: Paste image from clipboard" }
     )
 
+    -- The @-file picker keymap opens the user's vim.ui.select over the workspace
+    -- files (the same source as the inline @ completion), inserting the picked
+    -- reference and attaching the file. Only wired on the daemon path (a files
+    -- source), which owns the attach.
+    if self.files then
+        BufHelpers.multi_keymap_set(
+            Config.keymaps.prompt.pick_file,
+            self.buf_nrs.input,
+            function()
+                self:_pick_file_reference()
+            end,
+            { desc = "Tend: Attach file (picker)" }
+        )
+    end
+
     for _, bufnr in pairs(self.buf_nrs) do
         BufHelpers.multi_keymap_set(
             Config.keymaps.widget.close,
@@ -496,6 +511,68 @@ function ChatWidget:_bind_keymaps()
 
     DiffPreview.setup_diff_navigation_keymaps(self.buf_nrs)
     self:bind_chat_keymaps(self.buf_nrs.chat)
+end
+
+--- Open the workspace file picker (through vim.ui.select, so the user's own
+--- picker is reused) and, on a choice, insert the "@path" reference at the
+--- prompt cursor and attach the file to the next turn via the files source. A
+--- no-op when no picker/source is wired or the scan finds nothing.
+function ChatWidget:_pick_file_reference()
+    local picker = self.file_picker
+    local win = self.win_nrs.input
+    if
+        not picker
+        or not self.files
+        or not win
+        or not vim.api.nvim_win_is_valid(win)
+    then
+        return
+    end
+    local bufnr = self.buf_nrs.input
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    local items = picker:scan_files()
+    if #items == 0 then
+        Logger.notify("tend: no workspace files found")
+        return
+    end
+    vim.ui.select(items, {
+        prompt = "Attach file",
+        format_item = function(item)
+            return item.word
+        end,
+    }, function(choice)
+        if not choice then
+            return
+        end
+        -- choice.word is the "@path" reference; the file itself attaches, and the
+        -- reference text stays in the prompt so providers that read @mentions see
+        -- it too.
+        local path = choice.word:gsub("^@", "")
+        self:_insert_prompt_text(bufnr, win, cursor, choice.word .. " ")
+        self.files.on_pick(path)
+    end)
+end
+
+--- Insert text into the prompt input at the given (1-based row, 0-based col),
+--- leaving the cursor after it and returning to insert mode when the input
+--- window is focused. The modal picker blocks edits, so the captured position
+--- stays valid across the selection.
+--- @param bufnr integer the input buffer
+--- @param win integer the input window
+--- @param cursor integer[] { row, col } captured before the picker opened
+--- @param text string
+function ChatWidget:_insert_prompt_text(bufnr, win, cursor, text)
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+    end
+    local row, col = cursor[1], cursor[2]
+    vim.api.nvim_buf_set_text(bufnr, row - 1, col, row - 1, col, { text })
+    if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_set_cursor(win, { row, col + #text })
+        if vim.api.nvim_get_current_win() == win then
+            vim.cmd("startinsert")
+        end
+    end
 end
 
 --- Bind the provider/model/thought switcher keymaps on a buffer. Each switcher

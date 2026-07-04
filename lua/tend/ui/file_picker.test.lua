@@ -36,6 +36,66 @@ local function table_diff(left, right)
     return only_in_left, only_in_right
 end
 
+describe("FilePicker @-file on_pick", function()
+    local bufnr
+
+    before_each(function()
+        bufnr = vim.api.nvim_create_buf(false, true)
+    end)
+
+    --- Fire a CompleteDone as if `item` was the accepted completion item.
+    --- @param item table
+    local function complete_done(item)
+        vim.v.completed_item = item
+        vim.api.nvim_exec_autocmds("CompleteDone", { buffer = bufnr })
+    end
+
+    it(
+        "hands the picked path (no @) to on_pick on an accepted @ item",
+        function()
+            local picked = {}
+            FilePicker:new(bufnr, function(path)
+                table.insert(picked, path)
+            end)
+
+            complete_done({ word = "@lua/tend/init.lua", kind = "@" })
+
+            assert.same({ "lua/tend/init.lua" }, picked)
+        end
+    )
+
+    it("ignores a non-@ completion (e.g. a slash command)", function()
+        local picked = {}
+        FilePicker:new(bufnr, function(path)
+            table.insert(picked, path)
+        end)
+
+        complete_done({ word = "tasks", kind = "/" })
+
+        assert.same({}, picked)
+    end)
+
+    it("ignores a cancelled completion (empty item)", function()
+        local picked = {}
+        FilePicker:new(bufnr, function(path)
+            table.insert(picked, path)
+        end)
+
+        -- A cancelled completion leaves v:completed_item an empty dict; `{}`
+        -- would marshal as a list and v:completed_item requires a dict.
+        complete_done(vim.empty_dict())
+
+        assert.same({}, picked)
+    end)
+
+    it("does not error on an accepted @ item without an on_pick", function()
+        FilePicker:new(bufnr)
+        assert.has_no_errors(function()
+            complete_done({ word = "@a.lua", kind = "@" })
+        end)
+    end)
+end)
+
 describe("FilePicker:scan_files", function()
     --- @type TestStub|nil
     local system_stub

@@ -93,12 +93,13 @@ describe("tend.commands", function()
             -- window machinery stubbed. Captures the submit callback so a test
             -- can simulate the user pressing <CR> in the input.
             _G.widget = nil
-            _G.make_widget = function(on_submit, on_switch, controls, slash)
+            _G.make_widget = function(on_submit, on_switch, controls, slash, files)
                 local w = {
                     on_submit = on_submit,
                     on_switch = on_switch,
                     controls = controls,
                     slash = slash,
+                    files = files,
                     -- Real scratch panel buffers so the TodoList / context lists
                     -- (files, code, diagnostics) render into them.
                     buf_nrs = {
@@ -935,6 +936,23 @@ describe("tend.commands", function()
         -- Content supersedes text: no top-level text, a content array instead.
         assert.is_nil(p.text)
         assert.equal("text", p.content[1].type)
+        assert.equal("review this", p.content[1].text)
+        assert.equal("resource_link", p.content[2].type)
+        assert.is_not_nil(p.content[2].uri:find("init.lua", 1, true))
+    end)
+
+    it("an @-file pick attaches the file to the next turn's content", function()
+        -- The widget's @-file source, wired in ensure_widget, hands a picked
+        -- path to the daemon context so it rides the next turn as a content
+        -- block (the same path add_file / the files panel would attach).
+        child.lua([[
+                _G.give_session()
+                _G.calls = {}
+                _G.widget.files.on_pick("lua/tend/init.lua")
+                _G.widget.on_submit("review this")
+            ]])
+        local p = find_call(calls(), "agent.prompt").params
+        assert.is_nil(p.text)
         assert.equal("review this", p.content[1].text)
         assert.equal("resource_link", p.content[2].type)
         assert.is_not_nil(p.content[2].uri:find("init.lua", 1, true))

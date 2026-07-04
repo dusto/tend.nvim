@@ -77,7 +77,7 @@ local M = {}
 --- @field session? tend.commands.SessionInfo the existing session, unset for "new"
 
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
---- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls, slash: tend.ui.SlashSource): tend.ui.ChatWidget
+--- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls, slash: tend.ui.SlashSource, files: tend.ui.FileSource): tend.ui.ChatWidget
 
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
@@ -147,13 +147,14 @@ function M.setup(opts)
         widget = nil,
         todos = nil,
         widget_factory = opts.widget_factory
-            or function(on_submit, on_switch, controls, slash)
+            or function(on_submit, on_switch, controls, slash, files)
                 return ChatWidget:new(
                     vim.api.nvim_get_current_tabpage(),
                     on_submit,
                     on_switch,
                     controls,
-                    slash
+                    slash,
+                    files
                 )
             end,
     }, Context)
@@ -250,6 +251,12 @@ function Context:ensure_widget()
             end,
             complete = function(command, prefix, cb)
                 self:complete_slash(command, prefix, cb)
+            end,
+        }, {
+            -- @-file completion source: a picked file attaches to the next turn's
+            -- context (same content blocks as add_file / the files panel).
+            on_pick = function(path)
+                self:add_files({ path })
             end,
         })
     end

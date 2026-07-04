@@ -69,6 +69,12 @@ describe("tend.commands", function()
                         table.insert(self.events, event)
                     end,
                 },
+                log = {
+                    lines = {},
+                    render_lines = function(self)
+                        return self.lines
+                    end,
+                },
                 start = function(self)
                     self.started = self.started + 1
                 end,
@@ -1001,24 +1007,42 @@ describe("tend.commands", function()
         assert.is_not_nil(last_notice().msg:find("TendSessionNew", 1, true))
     end)
 
-    it("TendEvents shows the widget on the focused session", function()
+    it("TendEvents renders the plugin<->daemon protocol log", function()
         child.lua([[
-            _G.give_session()
-            _G.widget.shows = {}
+            _G.conn.log.lines = { "12:00:00  ->  request session.prompt #1" }
             vim.cmd("TendEvents")
+            _G.events_buf = vim.api.nvim_get_current_buf()
         ]])
-        assert.is_true(child.lua_get("#_G.widget.shows >= 1"))
-        -- Reading, not composing: the prompt is not focused.
-        assert.is_false(
+        assert.is_not_nil(
+            child
+                .lua_get("vim.api.nvim_buf_get_name(_G.events_buf)")
+                :find("tend://events", 1, true)
+        )
+        assert.same(
+            { "12:00:00  ->  request session.prompt #1" },
             child.lua_get(
-                "_G.widget.shows[#_G.widget.shows].focus_prompt == true"
+                "vim.api.nvim_buf_get_lines(_G.events_buf, 0, -1, false)"
             )
         )
-        assert.is_true(
-            child.lua_get(
-                "_G.widget.buf_nrs.chat == _G.ctx:active_session().bufnr"
-            )
+        -- Read-only log view, not the agent transcript.
+        assert.is_false(child.lua_get("vim.bo[_G.events_buf].modifiable"))
+        assert.equal(
+            "tendevents",
+            child.lua_get("vim.bo[_G.events_buf].filetype")
         )
+    end)
+
+    it("TendEvents shows a placeholder when the log is empty", function()
+        child.lua([[
+            _G.conn.log.lines = {}
+            vim.cmd("TendEvents")
+            _G.events_buf = vim.api.nvim_get_current_buf()
+        ]])
+        local lines = child.lua_get(
+            "vim.api.nvim_buf_get_lines(_G.events_buf, 0, -1, false)"
+        )
+        assert.equal(1, #lines)
+        assert.is_not_nil(lines[1]:find("no plugin<->daemon protocol", 1, true))
     end)
 
     it("TendSessionAttach lists sessions and focuses the chosen one", function()

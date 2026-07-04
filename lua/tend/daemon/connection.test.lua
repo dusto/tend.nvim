@@ -293,4 +293,29 @@ describe("tend.daemon.connection", function()
         h.connects[1].opts.on_disconnect()
         assert.equal(0, #h.defers)
     end)
+
+    it("records status transitions and wire activity in the log", function()
+        local h = harness()
+        local conn = new_conn(h)
+        conn:start()
+
+        -- Build the client the way the real transport does: wired to the
+        -- connect opts' on_trace so wire activity reaches conn.log.
+        local pending = h.connects[#h.connects]
+        local client = rpc.Client.new({
+            writer = function() end,
+            on_trace = pending.opts.on_trace,
+        })
+        pending.cb(client, nil)
+        -- Drive a request through the live client so a request trace lands.
+        client:request("session.prompt", { text = "hi" })
+
+        local kinds = {}
+        for _, e in ipairs(conn.log:entries()) do
+            table.insert(kinds, e.kind .. ":" .. (e.status or e.method or ""))
+        end
+        -- The lifecycle recorded connecting; the request recorded its method.
+        assert.is_true(vim.tbl_contains(kinds, "connection:connecting"))
+        assert.is_true(vim.tbl_contains(kinds, "request:session.prompt"))
+    end)
 end)

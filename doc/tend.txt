@@ -1090,7 +1090,7 @@ a task is delegated to the session (see |:TendTaskPick|).
   List the daemon's active sessions — each with its provider, task, and
   status (idle/running/waiting_approval/...) — and focus the one you pick.
   Focusing follows the session's event stream (transcript) and makes
-  |:TendChat| and |:TendEvents| target it. The currently focused session
+  |:TendChat| target it. The currently focused session
   is marked. A session started in this editor stays tracked; selecting it
   again reuses its transcript.
 
@@ -1136,8 +1136,13 @@ Slash commands (prompt) ~
 
                                                           *:TendEvents*
 :TendEvents
-  Open (or focus) the chat widget on the focused session with the cursor in
-  the transcript rather than the input — for reading back the conversation.
+  Open a read-only view of the plugin<->daemon protocol log in a new tab:
+  the rpc requests/responses (method, ok/err, round-trip timing), the
+  notifications the daemon pushes, and connection-lifecycle transitions —
+  the plugin-side mirror of the daemon's `TEND_LOG` trace, for debugging the
+  client/daemon link. It is NOT the agent transcript (that lives in the chat
+  widget). The buffer is a snapshot of a bounded ring buffer; re-run the
+  command to see later activity.
 
                                                           *:TendApprove*
 :TendApprove

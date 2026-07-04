@@ -41,6 +41,34 @@ local M = {}
 --- @field plan? tend.wire.PlanEntry[] latest agent plan, rendered in the todos panel
 --- @field commands? tend.slash.Command[] merged slash-command set (provider + daemon)
 
+--- One selectable option the daemon advertises for a session selector — a mode,
+--- model, or thought level (api.SessionMode/SessionModel/SessionThoughtLevel,
+--- which share this shape). The id is what is passed back to session.set_*.
+--- @class tend.commands.SessionOption
+--- @field id string
+--- @field name? string
+--- @field description? string
+
+--- The daemon's listed view of one session (api.SessionInfo), as returned by
+--- session.list / session.claim: routing (session_id/stream_id/workspace_id),
+--- lifecycle (status/pending/task), and the provider's current + available
+--- model / behavior mode / thought-level selectors (any subset may be empty).
+--- @class tend.commands.SessionInfo
+--- @field session_id string
+--- @field provider_id? string
+--- @field workspace_id? string
+--- @field worktree_root? string
+--- @field stream_id? string
+--- @field status? string
+--- @field task? table api.TaskRef
+--- @field pending? table api.SessionPending
+--- @field current_model_id? string
+--- @field available_models? tend.commands.SessionOption[]
+--- @field current_mode_id? string
+--- @field available_modes? tend.commands.SessionOption[]
+--- @field current_thought_level_id? string
+--- @field available_thought_levels? tend.commands.SessionOption[]
+
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
 --- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls, slash: tend.ui.SlashSource): tend.ui.ChatWidget
 
@@ -881,7 +909,7 @@ end
 --- Fetch the daemon's SessionInfo for the focused session (the authoritative
 --- source of its current/available modes and models) and pass it to cb. Reports
 --- and skips cb when no session is focused or the daemon no longer has it.
---- @param cb fun(info: table) api.SessionInfo
+--- @param cb fun(info: tend.commands.SessionInfo)
 function Context:active_session_info(cb)
     local session = self:active_session()
     if not session then
@@ -905,7 +933,7 @@ end
 
 --- @private
 --- Format a mode/model option for the picker, marking the current one.
---- @param option table api.SessionMode|api.SessionModel
+--- @param option tend.commands.SessionOption
 --- @param current_id? string
 --- @return string
 local function option_label(option, current_id)
@@ -1236,7 +1264,7 @@ function Context:session_new()
 end
 
 --- @private
---- @param s table api.SessionInfo
+--- @param s tend.commands.SessionInfo
 --- @return string
 local function session_label(s)
     local label = s.session_id
@@ -1256,11 +1284,12 @@ end
 --- @private
 --- Fetch the daemon's sessions (scoped to the current workspace when one is
 --- open) and pass them to cb; reports and skips cb when there are none.
---- @param cb fun(sessions: table[])
+--- @param cb fun(sessions: tend.commands.SessionInfo[])
 function Context:with_sessions(cb)
     local ws = self.workspace
     local params = ws and { workspace_id = ws.workspace_id } or {}
     self:call("session.list", params, function(result)
+        --- @type tend.commands.SessionInfo[]
         local list = result.sessions or {}
         if #list == 0 then
             report("tend: no active sessions; run :TendSessionNew to start one")
@@ -1272,7 +1301,7 @@ end
 
 --- @private
 --- Track a session (idempotent) and make it the focused one.
---- @param s table api.SessionInfo
+--- @param s tend.commands.SessionInfo
 --- @return tend.commands.Session
 function Context:focus_session(s)
     local session = self:track_session({

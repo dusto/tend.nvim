@@ -1,18 +1,3 @@
---- @alias tend.UserConfig.ProviderName
---- | "claude-acp"
---- | "claude-agent-acp"
---- | "gemini-acp"
---- | "codex-acp"
---- | "opencode-acp"
---- | "cursor-acp"
---- | "copilot-acp"
---- | "auggie-acp"
---- | "mistral-vibe-acp"
---- | "cline-acp"
---- | "goose-acp"
---- | "kiro-acp"
---- | "pi-acp"
-
 --- @alias tend.UserConfig.HeaderRenderFn fun(parts: tend.ui.ChatWidget.HeaderParts): string|nil
 
 --- User config headers - each panel can have either config parts or a custom render function
@@ -216,10 +201,6 @@
 --- @field on_file_edit? fun(data: tend.UserConfig.FileEditData): nil
 --- @field on_request_permission? fun(data: tend.UserConfig.RequestPermissionData): nil
 
---- Provider switcher UI behavior
---- @class tend.UserConfig.ProviderSwitcher
---- @field hide_unhealthy_providers boolean Hide providers whose command is not installed
-
 --- Control various behaviors and features of the plugin
 --- @class tend.UserConfig.Settings
 --- @field move_cursor_to_chat_on_submit boolean Automatically move cursor to chat window after submitting a prompt
@@ -245,7 +226,6 @@
 --- @class (partial) tend.PartialUserConfig.Folding.ToolCalls: tend.UserConfig.Folding.ToolCalls
 --- @class (partial) tend.PartialUserConfig.ToolCalls.Title: tend.UserConfig.ToolCalls.Title
 --- @class (partial) tend.PartialUserConfig.Settings: tend.UserConfig.Settings
---- @class (partial) tend.PartialUserConfig.ProviderSwitcher: tend.UserConfig.ProviderSwitcher
 
 --- Windows partial with nested type overrides
 --- @class (partial) tend.PartialUserConfig.Windows: tend.UserConfig.Windows
@@ -282,12 +262,9 @@
 --- @field folding? tend.PartialUserConfig.Folding
 --- @field tool_calls? tend.PartialUserConfig.ToolCalls
 --- @field settings? tend.PartialUserConfig.Settings
---- @field provider_switcher? tend.PartialUserConfig.ProviderSwitcher
 
 --- @class tend.UserConfig
 --- @field debug boolean Enable printing debug messages which can be read via `:messages`
---- @field provider tend.UserConfig.ProviderName
---- @field acp_providers table<tend.UserConfig.ProviderName, tend.wire.ACPProviderConfig|nil>
 --- @field windows tend.UserConfig.Windows
 --- @field keymaps tend.UserConfig.Keymaps
 --- @field spinner_chars tend.UserConfig.SpinnerChars
@@ -305,114 +282,9 @@
 --- @field hooks tend.UserConfig.Hooks
 --- @field headers tend.UserConfig.Headers
 --- @field settings tend.UserConfig.Settings
---- @field provider_switcher tend.UserConfig.ProviderSwitcher
 --- @field daemon tend.UserConfig.Daemon
 local ConfigDefault = {
     debug = false,
-
-    provider = "claude-agent-acp",
-
-    acp_providers = {
-        ["claude-agent-acp"] = {
-            name = "Claude Agent ACP",
-            command = "claude-agent-acp",
-            env = {},
-        },
-
-        ["claude-acp"] = {
-            name = "Claude ACP",
-            command = "claude-code-acp",
-            env = {},
-        },
-
-        ["gemini-acp"] = {
-            name = "Gemini ACP",
-            command = "gemini",
-            args = { "--acp" },
-            env = {},
-        },
-
-        ["codex-acp"] = {
-            name = "Codex ACP",
-            -- https://github.com/zed-industries/codex-acp/releases
-            -- xattr -dr com.apple.quarantine ~/.local/bin/codex-acp
-            command = "codex-acp",
-            args = {
-                -- "-c",
-                -- "features.web_search_request=true", -- disabled as it doesn't send proper tool call messages
-            },
-            env = {},
-        },
-
-        ["opencode-acp"] = {
-            name = "OpenCode ACP",
-            command = "opencode",
-            args = { "acp" },
-            env = {},
-        },
-
-        ["cursor-acp"] = {
-            name = "Cursor Agent ACP",
-            command = "cursor-agent",
-            args = {
-                "acp",
-            },
-            env = {},
-        },
-
-        ["copilot-acp"] = {
-            name = "Copilot ACP",
-            command = "copilot",
-            args = {
-                "--acp",
-                "--stdio",
-            },
-            env = {},
-        },
-
-        ["auggie-acp"] = {
-            name = "Auggie ACP",
-            command = "auggie",
-            args = {
-                "--acp",
-            },
-            env = {},
-        },
-
-        ["mistral-vibe-acp"] = {
-            name = "Mistral Vibe ACP",
-            command = "vibe-acp",
-            args = {},
-            env = {},
-        },
-
-        ["cline-acp"] = {
-            name = "Cline ACP",
-            command = "cline",
-            args = { "--acp" },
-            env = {},
-        },
-
-        ["goose-acp"] = {
-            name = "Goose ACP",
-            command = "goose",
-            args = { "acp" },
-            env = {},
-        },
-
-        ["kiro-acp"] = {
-            name = "Kiro ACP",
-            command = "kiro-cli",
-            args = { "acp" },
-            env = {},
-        },
-
-        ["pi-acp"] = {
-            name = "Pi ACP",
-            command = "pi-acp",
-            env = {},
-        },
-    },
 
     windows = {
         position = "right",
@@ -586,10 +458,6 @@ local ConfigDefault = {
 
     settings = {
         move_cursor_to_chat_on_submit = true,
-    },
-
-    provider_switcher = {
-        hide_unhealthy_providers = false,
     },
 
     daemon = {

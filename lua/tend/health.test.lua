@@ -45,15 +45,7 @@ describe("Health", function()
                 return true
             end,
         }
-        package.loaded["tend.config"] = {
-            provider = "codex",
-            acp_providers = {
-                codex = {
-                    name = "Codex",
-                    command = "codex",
-                },
-            },
-        }
+        package.loaded["tend.config"] = {}
         package.loaded["tend.ui.clipboard_image"] = {
             get_platform = function()
                 return "wsl"

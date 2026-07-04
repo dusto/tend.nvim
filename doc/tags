@@ -16,12 +16,10 @@ next	tend.txt	/*next*
 tend-auto-scroll	tend.txt	/*tend-auto-scroll*
 tend-blink-cmp	tend.txt	/*tend-blink-cmp*
 tend-chat-icons	tend.txt	/*tend-chat-icons*
-tend-config-acp-providers	tend.txt	/*tend-config-acp-providers*
 tend-config-daemon	tend.txt	/*tend-config-daemon*
 tend-config-diff-preview	tend.txt	/*tend-config-diff-preview*
 tend-config-headers	tend.txt	/*tend-config-headers*
 tend-config-hooks	tend.txt	/*tend-config-hooks*
-tend-config-provider	tend.txt	/*tend-config-provider*
 tend-config-provider-switcher	tend.txt	/*tend-config-provider-switcher*
 tend-config-settings	tend.txt	/*tend-config-settings*
 tend-config-windows	tend.txt	/*tend-config-windows*

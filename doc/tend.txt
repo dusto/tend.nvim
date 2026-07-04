@@ -171,12 +171,10 @@ Using lazy.nvim: ~
 
     --- @type tend.PartialUserConfig
     opts = {
-      -- Any ACP-compatible provider works. Built-in:
-      -- "claude-agent-acp" | "gemini-acp" | "codex-acp"
-      -- "opencode-acp" | "cursor-acp" | "copilot-acp"
-      -- "auggie-acp" | "mistral-vibe-acp" | "cline-acp"
-      -- "goose-acp" | "kiro-acp" | "pi-acp"
-      provider = "claude-agent-acp",
+      -- Providers are owned by the daemon (tendd). Seed the ids offered
+      -- by :TendProvider; the live set comes from the daemon's provider
+      -- list. See |tend-config-daemon|.
+      daemon = { providers = { "claude-agent-acp", "codex-acp" } },
     },
 
     -- The chat widget lifecycle is the require("tend") Lua API (see
@@ -200,66 +198,13 @@ The full default configuration with all options is defined in
 `lua/tend/config_default.lua`. You only need to specify the options
 you want to override.
 
-                                           *tend-config-provider*
-provider ~
-  Type: `string`
-  Default: `"claude-agent-acp"`
-
-  The ACP provider to use. Built-in providers:
-  `"claude-agent-acp"`, `"claude-acp"`, `"gemini-acp"`, `"codex-acp"`,
-  `"opencode-acp"`, `"cursor-acp"`, `"copilot-acp"`, `"auggie-acp"`,
-  `"mistral-vibe-acp"`, `"cline-acp"`, `"goose-acp"`, `"kiro-acp"`,
-  `"pi-acp"`.
-
-                                      *tend-config-acp-providers*
-acp_providers ~
-  Type: `table<string, table>`
-  Default: see `config_default.lua`
-
-  Customize built-in providers or add new ACP-compatible providers.
-  Each entry supports: `name`, `command`, `args`, `env`,
-  `default_mode`, `initial_model`, `default_thought_level`.
-
-  `default_mode`   Start every session in this mode (e.g.,
-                   `"bypassPermissions"`). Use <S-Tab> in the
-                   chat widget to see modes your provider offers.
-  `initial_model`  Override the provider's default model (e.g.,
-                   `"haiku"`). Use <localLeader>m in the chat
-                   widget to see available models.
-  `default_thought_level`
-                   Type: `string|nil`. Default thought effort level
-                   value to apply on session creation (e.g. `"high"`,
-                   `"max"` for Claude). If the provider does not
-                   support thought effort level switching or the value
-                   is not in the available options, a warning is shown
-                   and the provider's default is kept.
-                   When `initial_model` is also set, the thought
-                   effort level is applied AFTER the model change
-                   completes, so it validates against the new model's
-                   options (some providers, e.g. Claude, expose
-                   different effort levels per model).
-
->lua
-  --- @type tend.PartialUserConfig
-  opts = {
-    acp_providers = {
-      ["claude-agent-acp"] = {
-        default_mode = "bypassPermissions",
-        initial_model = "haiku",
-        default_thought_level = "high",
-        env = {
-          ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY"),
-        },
-      },
-      ["my-custom-provider"] = {
-        name = "My Provider",
-        command = "/path/to/my-acp-provider",
-        args = { "--acp" },
-        env = {},
-      },
-    },
-  }
-<
+  Providers are owned by the daemon (tendd), not this plugin: the
+  provider CLIs, per-provider spawn config, and session defaults live
+  in the daemon's configuration. The plugin only seeds the id list
+  offered by |:TendProvider| via `daemon.providers` (see
+  |tend-config-daemon|); the live set comes from the daemon's provider
+  list. Session mode / model / thought level are switched at runtime
+  from the chat widget (see |tend-keymaps|).
 
                                           *tend-config-windows*
 windows ~
@@ -1008,11 +953,12 @@ HEALTH CHECK                                      *tend-health-check*
 
 Run `:checkhealth tend` to verify:
   - Neovim version (>= 0.11.0 required)
-  - Current ACP provider installation
-  - Optional ACP providers availability
-  - Node.js and package managers
+  - Daemon (tendd) connection and contract versions
   - Clipboard image paste tooling (`powershell.exe`, `wslpath`,
     `wl-paste`, or `xclip`)
+
+Provider CLIs and Node.js are owned and health-checked by the daemon,
+not this plugin.
 
 ==============================================================================
 DEBUG                                                    *tend-debug*

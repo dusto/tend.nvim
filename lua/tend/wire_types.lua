@@ -320,20 +320,6 @@
 --- @field on_tool_call fun(tool_call: tend.ui.MessageWriter.ToolCallBlock): nil
 --- @field on_tool_call_update fun(tool_call: tend.ui.MessageWriter.ToolCallBlock): nil
 
---- @class tend.wire.ACPProviderConfig
---- @field name? string Provider name
---- @field transport_type? tend.wire.TransportType
---- @field command? string Command to spawn agent (for stdio)
---- @field args? string[] Arguments for agent command
---- @field env? table<string, string|nil> Environment variables
---- @field timeout? number Request timeout in milliseconds
---- @field reconnect? boolean Enable auto-reconnect
---- @field max_reconnect_attempts? number Maximum reconnection attempts
---- @field auth_method? string Authentication method
---- @field default_mode? string Default mode ID to set on session creation
---- @field initial_model? string Default model ID to set on session creation. When also setting default_thought_level, the thought level is applied AFTER the model change response (because effort/thought_level options can be model-dependent, e.g. Claude rebuilds them on model switch).
---- @field default_thought_level? string Default thought_level / effort value to set on session creation. Validated against the model's options. If `initial_model` is also set, applied after the model change completes.
-
 --- Content vocabulary (the ACP-style prompt/message content the UI renders),
 --- relocated here from the removed in-plugin ACP layer.
 
@@ -410,5 +396,3 @@
 --- @field info string Full description shown in popup window
 --- @field kind string Type/category of completion item
 --- @field icase number 1 for case-insensitive, 0 for case-sensitive
-
---- @alias tend.wire.TransportType "stdio" | "tcp" | "websocket"

@@ -10,11 +10,9 @@ describe("config_default", function()
             --- @type tend.PartialUserConfig
             local cfg = {
                 debug = true,
-                provider = "claude-agent-acp",
             }
 
             assert.equal(true, cfg.debug)
-            assert.equal("claude-agent-acp", cfg.provider)
         end)
 
         it("accepts partial nested windows config", function()

@@ -69,6 +69,13 @@ local M = {}
 --- @field current_thought_level_id? string
 --- @field available_thought_levels? tend.commands.SessionOption[]
 
+--- One entry in the deliver-task picker: either an existing session to deliver
+--- to, or the synthetic "start a new session" choice (session unset). Wrapping
+--- keeps the picker list a single honest type rather than mixing a sentinel into
+--- the session list.
+--- @class tend.commands.DeliverTarget
+--- @field session? tend.commands.SessionInfo the existing session, unset for "new"
+
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
 --- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls, slash: tend.ui.SlashSource): tend.ui.ChatWidget
 
@@ -1400,43 +1407,39 @@ function Context:deliver_task(task)
     self:call("session.list", params, function(result)
         --- @type tend.commands.SessionInfo[]
         local sessions = result.sessions or {}
-        -- A synthetic "new session" target leads the list so it is always
-        -- reachable, including when there are no running sessions. The picker
-        -- list mixes it with the sessions, so its element type is the union.
-        local new_target = { __new = true }
-        --- @type (tend.commands.SessionInfo | { __new: boolean })[]
-        local options = { new_target }
+        -- Each option wraps either a session or the synthetic "new session"
+        -- choice (leading the list so it is always reachable, including when no
+        -- sessions are running). Wrapping keeps the list one honest type, so the
+        -- picked target narrows on its `session` field with no cast.
+        --- @type tend.commands.DeliverTarget[]
+        local options = { { session = nil } }
         for _, s in ipairs(sessions) do
-            table.insert(options, s)
+            table.insert(options, { session = s })
         end
         vim.ui.select(options, {
             prompt = "Deliver " .. task.ref.id .. " to",
             format_item = function(o)
-                if o.__new then
-                    return "+ New session"
+                if o.session then
+                    return session_label(o.session)
                 end
-                return session_label(o --[[@as tend.commands.SessionInfo]])
+                return "+ New session"
             end,
         }, function(choice)
             if not choice then
                 return
             end
-            if choice.__new then
+            local session_info = choice.session
+            if not session_info then
                 self:start_session_for_task(task)
             else
-                -- The else branch narrows choice to a real session (not the
-                -- synthetic new-session target), but luals cannot narrow on the
-                -- custom __new field, so cast to the daemon session shape.
-                local session = self:focus_session(
-                    choice --[[@as tend.commands.SessionInfo]]
-                )
+                local session = self:focus_session(session_info)
                 self:show_session(session, false)
                 self:prompt_turn(task_prompt(task))
                 info(
                     "tend: delegated "
                         .. task.ref.id
                         .. " to session "
-                        .. choice.session_id
+                        .. session_info.session_id
                 )
             end
         end)

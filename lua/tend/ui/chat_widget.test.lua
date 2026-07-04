@@ -1047,6 +1047,45 @@ describe("tend.ui.ChatWidget", function()
         )
 
         it(
+            "wires @-file completion to the input when a files source is given",
+            function()
+                vim.cmd("tabnew")
+                tab_page_id = vim.api.nvim_get_current_tabpage()
+
+                local picked = {}
+                widget = ChatWidget:new(
+                    tab_page_id,
+                    spy.new(function() end) --[[@as function]],
+                    nil,
+                    nil,
+                    nil,
+                    {
+                        on_pick = function(path)
+                            table.insert(picked, path)
+                        end,
+                    }
+                )
+
+                -- The picker attaches its omnifunc to the input buffer,
+                assert.is_not_nil(
+                    vim.bo[widget.buf_nrs.input].omnifunc:find(
+                        "file_picker",
+                        1,
+                        true
+                    )
+                )
+                -- and an accepted @ item flows to the injected on_pick.
+                vim.v.completed_item =
+                    { word = "@lua/tend/init.lua", kind = "@" }
+                vim.api.nvim_exec_autocmds(
+                    "CompleteDone",
+                    { buffer = widget.buf_nrs.input }
+                )
+                assert.same({ "lua/tend/init.lua" }, picked)
+            end
+        )
+
+        it(
             "leaves the input completefunc unset without a slash source",
             function()
                 vim.cmd("tabnew")

@@ -3,6 +3,7 @@ local BufHelpers = require("tend.utils.buf_helpers")
 local BufferGuard = require("tend.ui.buffer_guard")
 local ChatNavigation = require("tend.ui.chat_navigation")
 local DiffPreview = require("tend.ui.diff_preview")
+local FilePicker = require("tend.ui.file_picker")
 local Logger = require("tend.utils.logger")
 local SlashComplete = require("tend.ui.slash_complete")
 local WindowDecoration = require("tend.ui.window_decoration")
@@ -44,6 +45,8 @@ local WidgetLayout = require("tend.ui.widget_layout")
 --- @field on_switch_session? fun() external callback opening the session switcher; nil disables the switch keymap
 --- @field controls tend.ui.ChatWidget.Controls daemon-sourced switcher callbacks; absent ones leave their keymap unbound (or, for the provider, fall back to the legacy path)
 --- @field slash? tend.ui.SlashSource daemon-sourced slash completion source; nil leaves the prompt without command completion (legacy path)
+--- @field files? tend.ui.FileSource @-file completion source; nil leaves the prompt without @-file completion
+--- @field file_picker? tend.ui.FilePicker strong ref to the input's @-file picker (kept so it is not weakly collected)
 --- @field _guard_augroup? integer BufferGuard autocmd group ID
 --- @field _winclosed_augroup? integer WinClosed autocmd group ID
 --- @field _closing? boolean True during programmatic window closes
@@ -64,17 +67,25 @@ ChatWidget.__index = ChatWidget
 --- @field change_mode? fun()
 --- @field change_thought_level? fun()
 
+--- Source the @-file completion needs, injected so the widget stays decoupled
+--- from the daemon connection: on_pick attaches the picked path to the next
+--- turn's context. Optional — an absent source leaves @-completion unwired.
+--- @class tend.ui.FileSource
+--- @field on_pick fun(path: string)
+
 --- @param tab_page_id integer
 --- @param on_submit_input fun(prompt: string): boolean
 --- @param on_switch_session fun()|nil
 --- @param controls tend.ui.ChatWidget.Controls|nil
 --- @param slash tend.ui.SlashSource|nil
+--- @param files tend.ui.FileSource|nil
 function ChatWidget:new(
     tab_page_id,
     on_submit_input,
     on_switch_session,
     controls,
-    slash
+    slash,
+    files
 )
     self = setmetatable({}, self)
 
@@ -85,6 +96,7 @@ function ChatWidget:new(
     self.on_switch_session = on_switch_session
     self.controls = controls or {}
     self.slash = slash
+    self.files = files
     self.tab_page_id = tab_page_id
 
     self:_initialize()
@@ -355,6 +367,13 @@ function ChatWidget:_initialize()
     -- Wire daemon-sourced slash completion onto the prompt input, when provided.
     if self.slash then
         SlashComplete.attach(self.buf_nrs.input, self.slash)
+    end
+    -- Wire @-file completion onto the prompt input. The picker uses omnifunc
+    -- (<C-x><C-o>) while slash uses completefunc, so the two coexist. The widget
+    -- owns the picker for its lifetime.
+    if self.files then
+        self.file_picker =
+            FilePicker:new(self.buf_nrs.input, self.files.on_pick)
     end
     -- Track every chat buffer the widget owns so destroy() cleans them all. The
     -- daemon path swaps buf_nrs.chat per session (create_chat_buffer), so the

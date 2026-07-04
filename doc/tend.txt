@@ -540,8 +540,12 @@ commands are provided by your ACP provider.
 File picker ~
                                                   *tend-file-picker*
 Type `@` in the prompt to trigger native Neovim completion with
-workspace files. Reference multiple files: `@file1.lua @file2.lua`.
-Uses `rg`, `fd`, `git ls-files`, or Lua globs as fallback.
+workspace files (accept with `<Tab>`). A picked file is attached to
+the next prompt turn's context — the same content block as
+|tend.add_file()| — so the agent receives the file, not just the
+`@path` text. Reference multiple files:
+`@file1.lua @file2.lua`. Uses `rg`, `fd`, `git ls-files`, or Lua globs
+as fallback.
 
 Image and screenshot support ~
                                                      *tend-images*

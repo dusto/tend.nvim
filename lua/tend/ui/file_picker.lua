@@ -5,6 +5,7 @@ local BufHelpers = require("tend.utils.buf_helpers")
 
 --- @class tend.ui.FilePicker
 --- @field _files table[]
+--- @field _on_pick? fun(path: string) called with the workspace-relative path when an @-completion is accepted
 local FilePicker = {}
 FilePicker.__index = FilePicker
 
@@ -35,14 +36,15 @@ FilePicker.CMD_GIT = { "git", "ls-files", "-co", "--exclude-standard" }
 local instances_by_buffer = setmetatable({}, { __mode = "v" })
 
 --- @param bufnr number
+--- @param on_pick? fun(path: string) called with the workspace-relative path when an @-completion is accepted
 --- @return tend.ui.FilePicker|nil
-function FilePicker:new(bufnr)
+function FilePicker:new(bufnr, on_pick)
     if not Config.file_picker.enabled then
         return nil
     end
 
     --- @type tend.ui.FilePicker
-    local instance = setmetatable({ _files = {} }, self)
+    local instance = setmetatable({ _files = {}, _on_pick = on_pick }, self)
     instance:_setup_completion(bufnr)
     return instance
 end
@@ -77,6 +79,29 @@ function FilePicker:_setup_completion(bufnr)
     )
 
     local last_at_pos = nil
+
+    -- When an @-file item is accepted, hand the picked path to the on_pick hook
+    -- so the daemon path can attach it to the next turn's context (the same
+    -- content blocks as add_file). Guarded on the @ kind so a slash or word
+    -- completion in the same buffer does not attach a file.
+    vim.api.nvim_create_autocmd("CompleteDone", {
+        buffer = bufnr,
+        desc = "tend @-file completion attach",
+        callback = function()
+            if not self._on_pick then
+                return
+            end
+            local item = vim.v.completed_item
+            if type(item) ~= "table" or item.kind ~= "@" then
+                return
+            end
+            local word = item.word or ""
+            local path = word:gsub("^@", "")
+            if path ~= "" then
+                self._on_pick(path)
+            end
+        end,
+    })
 
     vim.api.nvim_create_autocmd("TextChangedI", {
         buffer = bufnr,

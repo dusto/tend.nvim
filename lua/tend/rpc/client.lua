@@ -75,6 +75,16 @@ function Client.new(opts)
     }, Client)
 end
 
+--- @private
+--- Emit a trace event without letting a faulty sink disturb the protocol: the
+--- hook is pure observation, so a throwing sink must not stop a wire operation
+--- or a reply callback. Regression:
+--- `lua/tend/rpc/client.test.lua::"a throwing trace sink does not disturb the protocol"`.
+--- @param event tend.rpc.TraceEvent
+function Client:trace(event)
+    pcall(self.on_trace, event)
+end
+
 --- Send a request to the peer; cb is called with (err, result) on the reply.
 --- @param method string
 --- @param params any
@@ -84,7 +94,7 @@ function Client:request(method, params, cb)
     local id = self.next_id
     self.pending[id] = cb or function() end
     self.trace_pending[id] = { method = method, t0 = uv.now() }
-    self.on_trace({ dir = "out", kind = "request", method = method, id = id })
+    self:trace({ dir = "out", kind = "request", method = method, id = id })
     self:send({ jsonrpc = "2.0", id = id, method = method, params = params })
 end
 
@@ -92,7 +102,7 @@ end
 --- @param method string
 --- @param params any
 function Client:notify(method, params)
-    self.on_trace({ dir = "out", kind = "notification", method = method })
+    self:trace({ dir = "out", kind = "notification", method = method })
     self:send({ jsonrpc = "2.0", method = method, params = params })
 end
 
@@ -165,7 +175,7 @@ end
 --- @private
 --- @param msg table
 function Client:handle_request(msg)
-    self.on_trace({
+    self:trace({
         dir = "in",
         kind = "request",
         method = msg.method,
@@ -205,7 +215,7 @@ end
 --- @private
 --- @param msg table
 function Client:handle_notification(msg)
-    self.on_trace({ dir = "in", kind = "notification", method = msg.method })
+    self:trace({ dir = "in", kind = "notification", method = msg.method })
     local handler = self.notifications[msg.method]
     if handler then
         pcall(handler, msg.params)
@@ -217,7 +227,7 @@ end
 function Client:handle_response(msg)
     local meta = self.trace_pending[msg.id]
     self.trace_pending[msg.id] = nil
-    self.on_trace({
+    self:trace({
         dir = "in",
         kind = "response",
         method = meta and meta.method,

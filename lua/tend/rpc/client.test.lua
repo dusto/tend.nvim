@@ -233,6 +233,34 @@ describe("tend.rpc.client trace hook", function()
         assert.equal("events.unsubscribe", trace[1].method)
     end)
 
+    it("a throwing trace sink does not disturb the protocol", function()
+        local sent = {}
+        local client = rpc.Client.new({
+            writer = function(data)
+                table.insert(sent, vim.json.decode(vim.trim(data)))
+            end,
+            on_trace = function()
+                error("sink boom")
+            end,
+        })
+
+        -- A request whose trace sink throws must still be sent, and its reply
+        -- callback must still fire — tracing is observation, not a gate.
+        local got
+        assert.has_no_errors(function()
+            client:request("session.prompt", nil, function(_, result)
+                got = result
+            end)
+        end)
+        assert.equal(1, #sent)
+        assert.has_no_errors(function()
+            client:feed(
+                frame({ jsonrpc = "2.0", id = sent[1].id, result = "ok" })
+            )
+        end)
+        assert.equal("ok", got)
+    end)
+
     it("traces inbound requests and notifications from the peer", function()
         local client, _, trace = traced()
         client:on_request("editor.read_buffer", function()

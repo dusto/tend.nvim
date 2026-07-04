@@ -1398,10 +1398,13 @@ function Context:deliver_task(task)
     local ws = self.workspace
     local params = ws and { workspace_id = ws.workspace_id } or {}
     self:call("session.list", params, function(result)
+        --- @type tend.commands.SessionInfo[]
         local sessions = result.sessions or {}
         -- A synthetic "new session" target leads the list so it is always
-        -- reachable, including when there are no running sessions.
+        -- reachable, including when there are no running sessions. The picker
+        -- list mixes it with the sessions, so its element type is the union.
         local new_target = { __new = true }
+        --- @type (tend.commands.SessionInfo | { __new: boolean })[]
         local options = { new_target }
         for _, s in ipairs(sessions) do
             table.insert(options, s)
@@ -1412,7 +1415,7 @@ function Context:deliver_task(task)
                 if o.__new then
                     return "+ New session"
                 end
-                return session_label(o)
+                return session_label(o --[[@as tend.commands.SessionInfo]])
             end,
         }, function(choice)
             if not choice then
@@ -1421,7 +1424,12 @@ function Context:deliver_task(task)
             if choice.__new then
                 self:start_session_for_task(task)
             else
-                local session = self:focus_session(choice)
+                -- The else branch narrows choice to a real session (not the
+                -- synthetic new-session target), but luals cannot narrow on the
+                -- custom __new field, so cast to the daemon session shape.
+                local session = self:focus_session(
+                    choice --[[@as tend.commands.SessionInfo]]
+                )
                 self:show_session(session, false)
                 self:prompt_turn(task_prompt(task))
                 info(

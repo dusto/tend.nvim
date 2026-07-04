@@ -20,7 +20,6 @@ tend-config-daemon	tend.txt	/*tend-config-daemon*
 tend-config-diff-preview	tend.txt	/*tend-config-diff-preview*
 tend-config-headers	tend.txt	/*tend-config-headers*
 tend-config-hooks	tend.txt	/*tend-config-hooks*
-tend-config-provider-switcher	tend.txt	/*tend-config-provider-switcher*
 tend-config-settings	tend.txt	/*tend-config-settings*
 tend-config-windows	tend.txt	/*tend-config-windows*
 tend-configuration	tend.txt	/*tend-configuration*

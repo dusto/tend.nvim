@@ -238,14 +238,6 @@ settings ~
                        window after submitting a prompt.
                        Default: `true`.
 
-                                          *tend-config-provider-switcher*
-provider_switcher ~
-  Type: `table`
-
-  `hide_unhealthy_providers`  Hide providers whose command is not installed
-                       from the provider switcher UI.
-                       Default: `false`.
-
                                           *tend-config-daemon*
 daemon ~
   Type: `table`

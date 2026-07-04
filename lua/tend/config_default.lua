@@ -201,10 +201,6 @@
 --- @field on_file_edit? fun(data: tend.UserConfig.FileEditData): nil
 --- @field on_request_permission? fun(data: tend.UserConfig.RequestPermissionData): nil
 
---- Provider switcher UI behavior
---- @class tend.UserConfig.ProviderSwitcher
---- @field hide_unhealthy_providers boolean Hide providers whose command is not installed
-
 --- Control various behaviors and features of the plugin
 --- @class tend.UserConfig.Settings
 --- @field move_cursor_to_chat_on_submit boolean Automatically move cursor to chat window after submitting a prompt
@@ -230,7 +226,6 @@
 --- @class (partial) tend.PartialUserConfig.Folding.ToolCalls: tend.UserConfig.Folding.ToolCalls
 --- @class (partial) tend.PartialUserConfig.ToolCalls.Title: tend.UserConfig.ToolCalls.Title
 --- @class (partial) tend.PartialUserConfig.Settings: tend.UserConfig.Settings
---- @class (partial) tend.PartialUserConfig.ProviderSwitcher: tend.UserConfig.ProviderSwitcher
 
 --- Windows partial with nested type overrides
 --- @class (partial) tend.PartialUserConfig.Windows: tend.UserConfig.Windows
@@ -267,7 +262,6 @@
 --- @field folding? tend.PartialUserConfig.Folding
 --- @field tool_calls? tend.PartialUserConfig.ToolCalls
 --- @field settings? tend.PartialUserConfig.Settings
---- @field provider_switcher? tend.PartialUserConfig.ProviderSwitcher
 
 --- @class tend.UserConfig
 --- @field debug boolean Enable printing debug messages which can be read via `:messages`
@@ -288,7 +282,6 @@
 --- @field hooks tend.UserConfig.Hooks
 --- @field headers tend.UserConfig.Headers
 --- @field settings tend.UserConfig.Settings
---- @field provider_switcher tend.UserConfig.ProviderSwitcher
 --- @field daemon tend.UserConfig.Daemon
 local ConfigDefault = {
     debug = false,
@@ -465,10 +458,6 @@ local ConfigDefault = {
 
     settings = {
         move_cursor_to_chat_on_submit = true,
-    },
-
-    provider_switcher = {
-        hide_unhealthy_providers = false,
     },
 
     daemon = {

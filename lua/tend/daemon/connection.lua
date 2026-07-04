@@ -13,6 +13,7 @@
 local Logger = require("tend.utils.logger")
 local ApprovalManager = require("tend.approval.manager")
 local EditorService = require("tend.daemon.editor_service")
+local ProtocolLog = require("tend.daemon.protocol_log")
 local StreamSubscriber = require("tend.rpc.stream_subscriber")
 local Versions = require("tend.daemon.versions")
 local rpc = require("tend.rpc.client")
@@ -32,6 +33,7 @@ M.ERR_NOT_CONNECTED = -32001
 --- @field subscriber tend.rpc.StreamSubscriber
 --- @field approvals tend.approval.Manager
 --- @field editor tend.daemon.EditorService
+--- @field log tend.daemon.ProtocolLog plugin<->daemon wire activity for :TendEvents
 --- @field private client_id string
 --- @field private role string
 --- @field private prompt_capable boolean
@@ -65,6 +67,7 @@ M.Connection = Connection
 --- @field subscriber? tend.rpc.StreamSubscriber
 --- @field approvals? tend.approval.Manager
 --- @field editor? tend.daemon.EditorService Serves editor.* reverse requests.
+--- @field protocol_log? tend.daemon.ProtocolLog Records wire activity.
 
 --- @param opts? tend.daemon.ConnectionOpts
 --- @return tend.daemon.Connection
@@ -89,6 +92,7 @@ function Connection.new(opts)
         subscriber = opts.subscriber or StreamSubscriber.StreamSubscriber.new(),
         approvals = opts.approvals or ApprovalManager.Manager.new(),
         editor = opts.editor or EditorService.EditorService.new(),
+        log = opts.protocol_log or ProtocolLog.new(),
         client = nil,
         state = "disconnected",
         stopped = false,
@@ -177,6 +181,7 @@ end
 --- @param status tend.daemon.Status
 function Connection:set_state(status)
     self.state = status
+    self.log:record({ kind = "connection", status = status })
     self.on_status(status)
 end
 
@@ -188,6 +193,9 @@ function Connection:connect_once()
         on_error = self.on_error,
         on_disconnect = function()
             self:handle_disconnect()
+        end,
+        on_trace = function(ev)
+            self.log:record(ev)
         end,
     }, function(client, err)
         if not client then

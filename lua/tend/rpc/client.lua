@@ -26,6 +26,17 @@ M.ERR_INTERNAL = -32603
 --- @field message string
 --- @field data? any
 
+--- A protocol observation event emitted at each wire boundary. Purely for
+--- tracing (e.g. :TendEvents); it never affects request handling.
+--- @class tend.rpc.TraceEvent
+--- @field dir "out"|"in" Outbound (plugin->daemon) or inbound.
+--- @field kind "request"|"notification"|"response"
+--- @field method? string RPC method (a response carries the request's method).
+--- @field id? integer Request/response correlation id.
+--- @field ok? boolean Response outcome.
+--- @field err? string Error message on a failed response.
+--- @field elapsed_ms? integer Request round-trip time on a response.
+
 --- @class tend.rpc.Client
 --- @field private writer fun(data: string)
 --- @field private closer fun()
@@ -35,6 +46,8 @@ M.ERR_INTERNAL = -32603
 --- @field private pending table<integer, fun(err: tend.rpc.Error?, result: any)>
 --- @field private requests table<string, fun(params: any): any, tend.rpc.Error?>
 --- @field private notifications table<string, fun(params: any)>
+--- @field private on_trace fun(event: tend.rpc.TraceEvent)
+--- @field private trace_pending table<integer, { method: string, t0: integer }>
 local Client = {}
 Client.__index = Client
 M.Client = Client
@@ -43,6 +56,7 @@ M.Client = Client
 --- @field writer fun(data: string) Sends one framed message to the peer.
 --- @field closer? fun() Closes the transport (called by Client:close).
 --- @field on_error? fun(msg: string) Reports a parse/protocol error.
+--- @field on_trace? fun(event: tend.rpc.TraceEvent) Observes wire activity.
 
 --- @param opts tend.rpc.ClientOpts
 --- @return tend.rpc.Client
@@ -51,11 +65,13 @@ function Client.new(opts)
         writer = opts.writer,
         closer = opts.closer or function() end,
         on_error = opts.on_error or function() end,
+        on_trace = opts.on_trace or function() end,
         buffer = "",
         next_id = 0,
         pending = {},
         requests = {},
         notifications = {},
+        trace_pending = {},
     }, Client)
 end
 
@@ -67,6 +83,8 @@ function Client:request(method, params, cb)
     self.next_id = self.next_id + 1
     local id = self.next_id
     self.pending[id] = cb or function() end
+    self.trace_pending[id] = { method = method, t0 = uv.now() }
+    self.on_trace({ dir = "out", kind = "request", method = method, id = id })
     self:send({ jsonrpc = "2.0", id = id, method = method, params = params })
 end
 
@@ -74,6 +92,7 @@ end
 --- @param method string
 --- @param params any
 function Client:notify(method, params)
+    self.on_trace({ dir = "out", kind = "notification", method = method })
     self:send({ jsonrpc = "2.0", method = method, params = params })
 end
 
@@ -146,6 +165,12 @@ end
 --- @private
 --- @param msg table
 function Client:handle_request(msg)
+    self.on_trace({
+        dir = "in",
+        kind = "request",
+        method = msg.method,
+        id = msg.id,
+    })
     local handler = self.requests[msg.method]
     if not handler then
         self:send({
@@ -180,6 +205,7 @@ end
 --- @private
 --- @param msg table
 function Client:handle_notification(msg)
+    self.on_trace({ dir = "in", kind = "notification", method = msg.method })
     local handler = self.notifications[msg.method]
     if handler then
         pcall(handler, msg.params)
@@ -189,6 +215,18 @@ end
 --- @private
 --- @param msg table
 function Client:handle_response(msg)
+    local meta = self.trace_pending[msg.id]
+    self.trace_pending[msg.id] = nil
+    self.on_trace({
+        dir = "in",
+        kind = "response",
+        method = meta and meta.method,
+        id = msg.id,
+        ok = msg.error == nil,
+        err = msg.error and msg.error.message,
+        elapsed_ms = meta and (uv.now() - meta.t0) or nil,
+    })
+
     local cb = self.pending[msg.id]
     if not cb then
         self.on_error("tend.rpc: response for unknown id " .. tostring(msg.id))
@@ -218,6 +256,7 @@ end
 --- @field path? string Socket path (default: M.socket_path()).
 --- @field on_error? fun(msg: string)
 --- @field on_disconnect? fun()
+--- @field on_trace? fun(event: tend.rpc.TraceEvent)
 
 --- Connect to the daemon over a Unix socket and return a wired Client.
 ---
@@ -258,6 +297,7 @@ function M.connect(opts, cb)
                 end
             end,
             on_error = opts.on_error,
+            on_trace = opts.on_trace,
         })
         pipe:read_start(function(rerr, data)
             if rerr then

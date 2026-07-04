@@ -169,6 +169,95 @@ describe("tend.rpc.client inbound requests", function()
     end)
 end)
 
+describe("tend.rpc.client trace hook", function()
+    -- A fake transport that also captures every trace event.
+    local function traced()
+        local sent, trace = {}, {}
+        local client = rpc.Client.new({
+            writer = function(data)
+                table.insert(sent, vim.json.decode(vim.trim(data)))
+            end,
+            on_trace = function(ev)
+                table.insert(trace, ev)
+            end,
+        })
+        return client, sent, trace
+    end
+
+    it(
+        "traces an outbound request and its response with method+timing",
+        function()
+            local client, sent, trace = traced()
+            client:request("session.prompt", { text = "hi" })
+
+            assert.equal(1, #trace)
+            assert.equal("out", trace[1].dir)
+            assert.equal("request", trace[1].kind)
+            assert.equal("session.prompt", trace[1].method)
+            assert.is_not_nil(trace[1].id)
+
+            client:feed(
+                frame({ jsonrpc = "2.0", id = sent[1].id, result = "ok" })
+            )
+            assert.equal(2, #trace)
+            assert.equal("in", trace[2].dir)
+            assert.equal("response", trace[2].kind)
+            -- The response carries the originating request's method and outcome.
+            assert.equal("session.prompt", trace[2].method)
+            assert.is_true(trace[2].ok)
+            assert.is_not_nil(trace[2].elapsed_ms)
+        end
+    )
+
+    it("marks a failed response not-ok with its error message", function()
+        local client, sent, trace = traced()
+        client:request("task.show", nil)
+        client:feed(frame({
+            jsonrpc = "2.0",
+            id = sent[1].id,
+            error = { code = -32602, message = "bad" },
+        }))
+
+        local response = trace[#trace]
+        assert.equal("response", response.kind)
+        assert.is_false(response.ok)
+        assert.equal("bad", response.err)
+    end)
+
+    it("traces an outbound notification", function()
+        local client, _, trace = traced()
+        client:notify("events.unsubscribe", { stream_id = "s1" })
+        assert.equal(1, #trace)
+        assert.equal("out", trace[1].dir)
+        assert.equal("notification", trace[1].kind)
+        assert.equal("events.unsubscribe", trace[1].method)
+    end)
+
+    it("traces inbound requests and notifications from the peer", function()
+        local client, _, trace = traced()
+        client:on_request("editor.read_buffer", function()
+            return {}
+        end)
+        client:on_notification("event.push", function() end)
+
+        client:feed(frame({
+            jsonrpc = "2.0",
+            id = 42,
+            method = "editor.read_buffer",
+        }))
+        client:feed(frame({ jsonrpc = "2.0", method = "event.push" }))
+
+        assert.equal(2, #trace)
+        assert.equal("in", trace[1].dir)
+        assert.equal("request", trace[1].kind)
+        assert.equal("editor.read_buffer", trace[1].method)
+        assert.equal(42, trace[1].id)
+        assert.equal("in", trace[2].dir)
+        assert.equal("notification", trace[2].kind)
+        assert.equal("event.push", trace[2].method)
+    end)
+end)
+
 describe("tend.rpc.client framing", function()
     it("buffers a partial line until the rest arrives", function()
         local client, _ = fake()

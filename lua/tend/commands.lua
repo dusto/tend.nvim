@@ -87,7 +87,7 @@ local M = {}
 --- @field persona_id? string
 --- @field persona? tend.persona.Persona
 --- @field sessions table<string, tend.commands.Session> locally-tracked sessions by id
---- @field active? string the focused session id; :TendChat/:TendEvents target it
+--- @field active? string the focused session id; :TendChat targets it
 --- @field widget? tend.ui.ChatWidget the one chat widget, created on first session
 --- @field private todos? tend.ui.TodoList shared todos panel, created on first plan
 --- @field private file_list? tend.ui.FileList referenced-files context, attached to the next turn
@@ -666,7 +666,7 @@ function Context:register_commands()
             "Stop following a session in this editor",
         },
         { "TendChat", "chat", "Send a prompt to the focused session" },
-        { "TendEvents", "events", "Open the focused session's transcript" },
+        { "TendEvents", "events", "Show the plugin<->daemon protocol log" },
         { "TendApprove", "approve", "Review pending approvals" },
         {
             "TendOpenChanges",
@@ -1340,7 +1340,7 @@ end
 
 --- List the daemon's sessions and focus the chosen one — tracking its stream
 --- (transcript) if not already followed, then pointing the chat widget at it so
---- :TendChat / :TendEvents and the input target it. The picker marks the active
+--- :TendChat and the input target it. The picker marks the active
 --- session and shows each one's status/task. Shared by |:TendSessionAttach| and
 --- the in-chat switch keymap, so switching works from inside the chat without
 --- leaving it.
@@ -1544,15 +1544,25 @@ end
 
 --- Open (or focus) the chat widget on the focused session, cursor in the
 --- transcript (reading rather than composing).
+--- Open a read-only view of the plugin<->daemon protocol log: the rpc
+--- requests/responses, notifications, and connection-lifecycle transitions on
+--- the wire (not the agent transcript — that lives in the chat widget). Sourced
+--- from the connection's bounded ring buffer.
 function Context:events()
-    local session = self:active_session()
-    if not session then
-        report(
-            "tend: no focused session; run :TendSessionNew or :TendSessionAttach"
-        )
-        return
+    local lines = self.conn.log:render_lines()
+    if #lines == 0 then
+        lines = { "tend: no plugin<->daemon protocol activity recorded yet" }
     end
-    self:show_session(session, false)
+
+    vim.cmd("tabnew")
+    local buf = vim.api.nvim_get_current_buf()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    pcall(vim.api.nvim_buf_set_name, buf, "tend://events")
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].swapfile = false
+    vim.bo[buf].modifiable = false
+    vim.bo[buf].filetype = "tendevents"
 end
 
 --- Show the chat widget on the focused session. Backs require("tend").open;

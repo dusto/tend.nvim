@@ -18,6 +18,7 @@ tend-blink-cmp	tend.txt	/*tend-blink-cmp*
 tend-chat-icons	tend.txt	/*tend-chat-icons*
 tend-config-daemon	tend.txt	/*tend-config-daemon*
 tend-config-diff-preview	tend.txt	/*tend-config-diff-preview*
+tend-config-diff-review	tend.txt	/*tend-config-diff-review*
 tend-config-headers	tend.txt	/*tend-config-headers*
 tend-config-hooks	tend.txt	/*tend-config-hooks*
 tend-config-settings	tend.txt	/*tend-config-settings*
@@ -31,6 +32,7 @@ tend-daemon-slash	tend.txt	/*tend-daemon-slash*
 tend-debug	tend.txt	/*tend-debug*
 tend-diagnostic-icons	tend.txt	/*tend-diagnostic-icons*
 tend-diff-preview	tend.txt	/*tend-diff-preview*
+tend-diff-review	tend.txt	/*tend-diff-review*
 tend-features	tend.txt	/*tend-features*
 tend-file-picker	tend.txt	/*tend-file-picker*
 tend-file-picker-config	tend.txt	/*tend-file-picker-config*

@@ -19,12 +19,13 @@ CONTENTS                                              *tend-contents*
   5. Usage .......................... |tend-usage|
   6. Keymaps ........................ |tend-keymaps|
   7. Diff Preview ................... |tend-diff-preview|
-  8. Features ....................... |tend-features|
-  9. Customization .................. |tend-customization|
-  10. Integrations .................. |tend-integrations|
-  11. Health Check .................. |tend-health-check|
-  12. Debug ......................... |tend-debug|
-  13. Daemon (preview) .............. |tend-daemon|
+  8. Diff Review .................... |tend-diff-review|
+  9. Features ....................... |tend-features|
+  10. Customization ................. |tend-customization|
+  11. Integrations ................. |tend-integrations|
+  12. Health Check ................. |tend-health-check|
+  13. Debug ........................ |tend-debug|
+  14. Daemon (preview) ............. |tend-daemon|
 
 ==============================================================================
 INTRODUCTION                                      *tend-introduction*
@@ -523,6 +524,44 @@ Navigation: use `]c` / `[c` to move between hunks (configurable
 via |tend-keymaps-customizing|).
 
 Note: changing layout requires restarting Neovim.
+
+==============================================================================
+DIFF REVIEW                                        *tend-diff-review*
+
+Read-only review of a daemon change set — |:TendDiff| and the daemon's
+`editor.diff` request — renders through a configurable backend. The daemon
+carries the full before/after snapshots, so review never reads disk or
+reconstructs a file (a denied or still-pending proposal is shown exactly as
+proposed).
+
+                                        *tend-config-diff-review*
+Configuration: ~
+>lua
+  --- @type tend.PartialUserConfig
+  opts = {
+    diff_review = {
+      backend = "native",  -- "native" | "mini_diff" | "custom"
+      style = "split",     -- native only: "split" | "unified"
+      renderer = nil,      -- required for the "custom" backend
+    },
+  }
+<
+
+  `backend`    Renderer backend. Default: `"native"`.
+               - `"native"`: built-in, no dependencies.
+               - `"mini_diff"`: overlay the snapshots via mini.diff; falls
+                 back to native when mini.diff is not installed.
+               - `"custom"`: route to `renderer` (see below); falls back to
+                 native when `renderer` is not a function.
+  `style`      Native layout: `"split"` (two side-by-side diff buffers) or
+               `"unified"` (one `diff`-filetype buffer). Default: `"split"`.
+  `renderer`   For `backend = "custom"`: a function called as
+               `renderer(change_set_id, files)`, where each file is a table
+               `{ uri, before, after }`. It owns the display; the return
+               value is passed back to the caller unchanged.
+
+Any backend receiving self-contained snapshots keeps the read-only review
+semantics — a plugin or callback must not reconstruct the file from disk.
 
                                        *tend-permission-approval*
 Permission approval ~
@@ -1114,11 +1153,11 @@ Slash commands (prompt) ~
 
                                                           *:TendDiff*
 :TendDiff [{change_set_id}]
-  Review a change set's captured before/after snapshots in a native diff
-  view, one tab per file. The daemon serves the snapshots (a denied or
-  still-pending proposal is reviewable exactly as proposed), so this
-  shows what the set changed, not the live file. With no argument you are
-  prompted for the id. Read-only.
+  Review a change set's captured before/after snapshots, one tab per file,
+  through the configured diff backend (see |tend-diff-review|). The daemon
+  serves the snapshots (a denied or still-pending proposal is reviewable
+  exactly as proposed), so this shows what the set changed, not the live
+  file. With no argument you are prompted for the id. Read-only.
 
 The daemon may also drive these directly: when it has a change set to
 show it calls `editor.open` / `editor.diff` on the bound editor, which

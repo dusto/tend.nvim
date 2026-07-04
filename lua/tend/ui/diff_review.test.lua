@@ -116,4 +116,115 @@ describe("tend.ui.diff_review", function()
     it("show_snapshots with no files renders nothing", function()
         assert.equal(0, child.lua_get([[#_G.R.show_snapshots("cs-1", {})]]))
     end)
+
+    it(
+        "native 'unified' style renders one diff-filetype buffer per file",
+        function()
+            local state = child.lua([[
+            local cfg = require("tend.config")
+            cfg.diff_review.backend = "native"
+            cfg.diff_review.style = "unified"
+            local r = _G.R.show_snapshots("cs-1", {
+                { uri = _G.uri("a.go"), before = "one\ntwo", after = "one\nTWO" },
+            })
+            local lines = vim.api.nvim_buf_get_lines(r[1].bufnr, 0, -1, false)
+            return {
+                count = #r,
+                ft = vim.bo[r[1].bufnr].filetype,
+                modifiable = vim.bo[r[1].bufnr].modifiable,
+                body = table.concat(lines, "\n"),
+            }
+        ]])
+            assert.equal(1, state.count)
+            assert.equal("diff", state.ft)
+            assert.is_false(state.modifiable)
+            -- The unified hunk shows the removed and added line.
+            assert.is_not_nil(state.body:find("-two", 1, true))
+            assert.is_not_nil(state.body:find("+TWO", 1, true))
+        end
+    )
+
+    it(
+        "routes to a configured 'custom' renderer and returns its result",
+        function()
+            local seen = child.lua([[
+            local cfg = require("tend.config")
+            cfg.diff_review.backend = "custom"
+            _G.seen = {}
+            cfg.diff_review.renderer = function(change_set_id, files)
+                _G.seen.change_set_id = change_set_id
+                _G.seen.file_count = #files
+                return { { uri = files[1].uri, tabpage = 0 } }
+            end
+            local r = _G.R.show_snapshots("cs-42", {
+                { uri = _G.uri("a.go"), before = "x", after = "y" },
+            })
+            _G.seen.returned = #r
+            return _G.seen
+        ]])
+            assert.equal("cs-42", seen.change_set_id)
+            assert.equal(1, seen.file_count)
+            assert.equal(1, seen.returned)
+        end
+    )
+
+    it("falls back to native when 'custom' backend has no renderer", function()
+        local rendered = child.lua([[
+            local cfg = require("tend.config")
+            cfg.diff_review.backend = "custom"
+            cfg.diff_review.renderer = nil
+            local r = _G.R.show_snapshots("cs-1", {
+                { uri = _G.uri("a.go"), before = "a", after = "A" },
+            })
+            -- native split renders paired before/after scratch buffers.
+            return { count = #r, has_pair = r[1].before_bufnr ~= nil and r[1].after_bufnr ~= nil }
+        ]])
+        assert.equal(1, rendered.count)
+        assert.is_true(rendered.has_pair)
+    end)
+
+    it("mini_diff backend seeds after-content and reference text", function()
+        local state = child.lua([[
+            local cfg = require("tend.config")
+            cfg.diff_review.backend = "mini_diff"
+            _G.mini_calls = {}
+            _G.R.get_mini_diff = function()
+                return {
+                    enable = function(b) _G.mini_calls.enabled = b end,
+                    set_ref_text = function(b, t) _G.mini_calls.ref = t end,
+                    toggle_overlay = function(b) _G.mini_calls.overlay = b end,
+                }
+            end
+            local r = _G.R.show_snapshots("cs-1", {
+                { uri = _G.uri("a.go"), before = "before-text", after = "after-text" },
+            })
+            return {
+                count = #r,
+                after = vim.api.nvim_buf_get_lines(r[1].bufnr, 0, -1, false),
+                ref = _G.mini_calls.ref,
+                enabled_is_buf = _G.mini_calls.enabled == r[1].bufnr,
+            }
+        ]])
+        assert.equal(1, state.count)
+        assert.same({ "after-text" }, state.after)
+        assert.equal("before-text", state.ref)
+        assert.is_true(state.enabled_is_buf)
+    end)
+
+    it(
+        "mini_diff backend falls back to native when mini.diff is absent",
+        function()
+            local rendered = child.lua([[
+            local cfg = require("tend.config")
+            cfg.diff_review.backend = "mini_diff"
+            _G.R.get_mini_diff = function() return nil end
+            local r = _G.R.show_snapshots("cs-1", {
+                { uri = _G.uri("a.go"), before = "a", after = "A" },
+            })
+            return { count = #r, has_pair = r[1].before_bufnr ~= nil and r[1].after_bufnr ~= nil }
+        ]])
+            assert.equal(1, rendered.count)
+            assert.is_true(rendered.has_pair)
+        end
+    )
 end)

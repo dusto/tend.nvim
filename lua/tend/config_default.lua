@@ -174,6 +174,14 @@
 --- @field layout "inline" | "split"
 --- @field center_on_navigate_hunks boolean
 
+--- Read-only change-set review rendering (:TendDiff and agent-triggered
+--- editor.diff). The backend consumes the daemon's self-contained before/after
+--- snapshots; a configured plugin backend falls back to native when absent.
+--- @class tend.UserConfig.DiffReview
+--- @field backend "native"|"mini_diff"|"custom" Diff renderer backend
+--- @field style "split"|"unified" Native backend layout
+--- @field renderer? tend.ui.DiffReview.RenderFn Renderer for the "custom" backend
+
 --- Tool call folding configuration
 --- @class tend.UserConfig.Folding.ToolCalls
 --- @field enabled boolean Whether to fold tool call bodies.
@@ -223,6 +231,7 @@
 --- @class (partial) tend.PartialUserConfig.ImagePaste: tend.UserConfig.ImagePaste
 --- @class (partial) tend.PartialUserConfig.AutoScroll: tend.UserConfig.AutoScroll
 --- @class (partial) tend.PartialUserConfig.DiffPreview: tend.UserConfig.DiffPreview
+--- @class (partial) tend.PartialUserConfig.DiffReview: tend.UserConfig.DiffReview
 --- @class (partial) tend.PartialUserConfig.Folding.ToolCalls: tend.UserConfig.Folding.ToolCalls
 --- @class (partial) tend.PartialUserConfig.ToolCalls.Title: tend.UserConfig.ToolCalls.Title
 --- @class (partial) tend.PartialUserConfig.Settings: tend.UserConfig.Settings
@@ -259,6 +268,7 @@
 --- @field image_paste? tend.PartialUserConfig.ImagePaste
 --- @field auto_scroll? tend.PartialUserConfig.AutoScroll
 --- @field diff_preview? tend.PartialUserConfig.DiffPreview
+--- @field diff_review? tend.PartialUserConfig.DiffReview
 --- @field folding? tend.PartialUserConfig.Folding
 --- @field tool_calls? tend.PartialUserConfig.ToolCalls
 --- @field settings? tend.PartialUserConfig.Settings
@@ -277,6 +287,7 @@
 --- @field image_paste tend.UserConfig.ImagePaste
 --- @field auto_scroll tend.UserConfig.AutoScroll
 --- @field diff_preview tend.UserConfig.DiffPreview
+--- @field diff_review tend.UserConfig.DiffReview
 --- @field folding tend.UserConfig.Folding
 --- @field tool_calls tend.UserConfig.ToolCalls
 --- @field hooks tend.UserConfig.Hooks
@@ -424,6 +435,12 @@ local ConfigDefault = {
         enabled = true,
         layout = "split",
         center_on_navigate_hunks = true,
+    },
+
+    diff_review = {
+        backend = "native",
+        style = "split",
+        renderer = nil,
     },
 
     folding = {

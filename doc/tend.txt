@@ -461,7 +461,9 @@ KEYMAPS                                                *tend-keymaps*
 These keybindings are automatically set in Tend buffers:
 
   Key                    Mode    Description ~
-  <S-Tab>                n/v/i   Switch agent mode (if supported)
+  <S-Tab>                n/v/i   Switch the focused session's behavior/
+                                 permission mode (daemon-advertised;
+                                 reports if none)
   <CR>                   n       Submit prompt
   <C-s>                  n/v/i   Submit prompt
   <Tab>                  i       Accept file completion
@@ -473,8 +475,8 @@ These keybindings are automatically set in Tend buffers:
   <localLeader>m         n       Switch the focused session's model
                                  (daemon-advertised; reports if none)
   <localLeader>t         n       Switch the focused session's thought/
-                                 reasoning level (daemon modes; reports
-                                 if none)
+                                 reasoning level (daemon thought-level
+                                 axis; reports if none)
   q                      n       Close chat widget
   d                      n/v     Remove file/selection/diagnostic
   ]]                     n       Next chat heading

@@ -36,9 +36,45 @@ local M = {}
 --- @field view tend.transcript.ChatView
 --- @field provider_id? string provider shown in the chat header
 --- @field model_id? string active model, reflected in the chat header
---- @field mode_id? string active mode (thought/reasoning), reflected in the header
+--- @field mode_id? string active behavior/permission mode, reflected in the header
+--- @field thought_level_id? string active reasoning/thought level, reflected in the header
 --- @field plan? tend.wire.PlanEntry[] latest agent plan, rendered in the todos panel
 --- @field commands? tend.slash.Command[] merged slash-command set (provider + daemon)
+
+--- One selectable option the daemon advertises for a session selector — a mode,
+--- model, or thought level (api.SessionMode/SessionModel/SessionThoughtLevel,
+--- which share this shape). The id is what is passed back to session.set_*.
+--- @class tend.commands.SessionOption
+--- @field id string
+--- @field name? string
+--- @field description? string
+
+--- The daemon's listed view of one session (api.SessionInfo), as returned by
+--- session.list / session.claim: routing (session_id/stream_id/workspace_id),
+--- lifecycle (status/pending/task), and the provider's current + available
+--- model / behavior mode / thought-level selectors (any subset may be empty).
+--- @class tend.commands.SessionInfo
+--- @field session_id string
+--- @field provider_id? string
+--- @field workspace_id? string
+--- @field worktree_root? string
+--- @field stream_id? string
+--- @field status? string
+--- @field task? table api.TaskRef
+--- @field pending? table api.SessionPending
+--- @field current_model_id? string
+--- @field available_models? tend.commands.SessionOption[]
+--- @field current_mode_id? string
+--- @field available_modes? tend.commands.SessionOption[]
+--- @field current_thought_level_id? string
+--- @field available_thought_levels? tend.commands.SessionOption[]
+
+--- One entry in the deliver-task picker: either an existing session to deliver
+--- to, or the synthetic "start a new session" choice (session unset). Wrapping
+--- keeps the picker list a single honest type rather than mixing a sentinel into
+--- the session list.
+--- @class tend.commands.DeliverTarget
+--- @field session? tend.commands.SessionInfo the existing session, unset for "new"
 
 --- @alias tend.commands.SubmitInput fun(prompt: string): boolean
 --- @alias tend.commands.WidgetFactory fun(on_submit: tend.commands.SubmitInput, on_switch: fun(), controls: tend.ui.ChatWidget.Controls, slash: tend.ui.SlashSource): tend.ui.ChatWidget
@@ -189,13 +225,18 @@ function Context:ensure_widget()
             self:switch_session()
         end, {
             -- Daemon-sourced switchers acting on the active session: provider sets
-            -- the default for new sessions, model/thought reconfigure the focused
-            -- session through the daemon (set_model/set_mode).
+            -- the default for new sessions; model/mode/thought reconfigure the
+            -- focused session through the daemon (set_model/set_mode/
+            -- set_thought_level). Mode (behavior/permission) and thought level are
+            -- distinct daemon axes, so each has its own switcher.
             switch_provider = function()
                 self:provider_pick()
             end,
             switch_model = function()
                 self:switch_model()
+            end,
+            change_mode = function()
+                self:change_mode()
             end,
             change_thought_level = function()
                 self:change_thought_level()
@@ -486,25 +527,28 @@ function Context:show_session(session, focus_prompt)
 end
 
 --- @private
---- Reflect a session's provider/model/mode in the chat panel header, so the
---- active configuration is visible without opening a switcher. Skips empty parts
---- (a session whose model/mode the daemon has not reported yet shows just the
---- provider); a no-op when nothing is known.
+--- Reflect a session's provider / model / mode / thought level in the chat panel
+--- header, so the active configuration is visible without opening a switcher.
+--- Skips empty parts (a session whose model/mode/thought the daemon has not
+--- reported yet shows just the provider); a no-op when nothing is known.
 --- @param session tend.commands.Session
 function Context:render_session_header(session)
     if not self.widget then
         return
     end
+    -- Append in order, skipping empties. A plain loop (not ipairs over a literal)
+    -- because an unset middle field would be a nil hole that halts ipairs early,
+    -- dropping every later part (e.g. thought level when model/mode are unset).
     local parts = {}
-    for _, value in ipairs({
-        session.provider_id,
-        session.model_id,
-        session.mode_id,
-    }) do
+    local function push(value)
         if value and value ~= "" then
             table.insert(parts, value)
         end
     end
+    push(session.provider_id)
+    push(session.model_id)
+    push(session.mode_id)
+    push(session.thought_level_id)
     if #parts > 0 then
         self.widget:render_header("chat", table.concat(parts, " · "))
     end
@@ -872,7 +916,7 @@ end
 --- Fetch the daemon's SessionInfo for the focused session (the authoritative
 --- source of its current/available modes and models) and pass it to cb. Reports
 --- and skips cb when no session is focused or the daemon no longer has it.
---- @param cb fun(info: table) api.SessionInfo
+--- @param cb fun(info: tend.commands.SessionInfo)
 function Context:active_session_info(cb)
     local session = self:active_session()
     if not session then
@@ -896,7 +940,7 @@ end
 
 --- @private
 --- Format a mode/model option for the picker, marking the current one.
---- @param option table api.SessionMode|api.SessionModel
+--- @param option tend.commands.SessionOption
 --- @param current_id? string
 --- @return string
 local function option_label(option, current_id)
@@ -938,19 +982,20 @@ function Context:switch_model()
     end)
 end
 
---- Switch the focused session's thought/reasoning level: pick from the
---- daemon-advertised modes for the session and set it (session.set_mode). The
---- daemon models reasoning as session modes (tend-e7p.11). Reports cleanly when
---- the provider offers no modes.
-function Context:change_thought_level()
+--- Switch the focused session's behavior/permission mode: pick from the
+--- daemon-advertised modes for the session and set it (session.set_mode).
+--- Distinct from the thought-level axis (see change_thought_level): a provider
+--- may expose modes (e.g. claude's permission modes, codex's reasoning effort),
+--- a thought level, both, or neither. Reports cleanly when it offers no modes.
+function Context:change_mode()
     self:active_session_info(function(s)
         local modes = s.available_modes or {}
         if #modes == 0 then
-            info("tend: this provider offers no thought/reasoning levels")
+            info("tend: this provider offers no modes")
             return
         end
         vim.ui.select(modes, {
-            prompt = "Thought level",
+            prompt = "Mode",
             format_item = function(m)
                 return option_label(m, s.current_mode_id)
             end,
@@ -966,6 +1011,42 @@ function Context:change_thought_level()
                     s.session_id,
                     { mode_id = res and res.current_mode_id or choice.id }
                 )
+                info("tend: mode → " .. option_label(choice):sub(3))
+            end)
+        end)
+    end)
+end
+
+--- Switch the focused session's reasoning/thought level: pick from the
+--- daemon-advertised thought levels for the session and set it
+--- (session.set_thought_level). This is its own daemon axis, separate from the
+--- behavior/permission mode (see change_mode) — e.g. claude exposes an effort
+--- thought level alongside its permission modes. Reports cleanly when the
+--- provider offers no thought levels.
+function Context:change_thought_level()
+    self:active_session_info(function(s)
+        local levels = s.available_thought_levels or {}
+        if #levels == 0 then
+            info("tend: this provider offers no thought/reasoning levels")
+            return
+        end
+        vim.ui.select(levels, {
+            prompt = "Thought level",
+            format_item = function(m)
+                return option_label(m, s.current_thought_level_id)
+            end,
+        }, function(choice)
+            if not choice then
+                return
+            end
+            self:call("session.set_thought_level", {
+                session_id = s.session_id,
+                thought_level_id = choice.id,
+            }, function(res)
+                self:apply_session_config(s.session_id, {
+                    thought_level_id = res and res.current_thought_level_id
+                        or choice.id,
+                })
                 info("tend: thought level → " .. option_label(choice):sub(3))
             end)
         end)
@@ -973,10 +1054,10 @@ function Context:change_thought_level()
 end
 
 --- @private
---- Record a session's new model/mode locally and refresh the chat header if the
---- session is the focused one. A no-op for an untracked session.
+--- Record a session's new model/mode/thought level locally and refresh the chat
+--- header if the session is the focused one. A no-op for an untracked session.
 --- @param session_id string
---- @param config { model_id?: string, mode_id?: string }
+--- @param config { model_id?: string, mode_id?: string, thought_level_id?: string }
 function Context:apply_session_config(session_id, config)
     local session = self.sessions[session_id]
     if not session then
@@ -987,6 +1068,9 @@ function Context:apply_session_config(session_id, config)
     end
     if config.mode_id then
         session.mode_id = config.mode_id
+    end
+    if config.thought_level_id then
+        session.thought_level_id = config.thought_level_id
     end
     if self.active == session_id then
         self:render_session_header(session)
@@ -1037,6 +1121,7 @@ function Context:track_session(spec)
             self.conn.approvals:handle_event(event)
             self:apply_plan(session, event)
             self:apply_commands(session, event)
+            self:apply_session_updates(session, event)
         end,
     })
     -- Prime the command set so "/" completes before the agent first advertises
@@ -1060,6 +1145,34 @@ function Context:apply_commands(session, event)
     end
     local payload = type(event.payload) == "table" and event.payload or {}
     session.commands = payload.commands or {}
+end
+
+--- @private
+--- Keep a session's model / mode / thought level live from the daemon's config
+--- update events, so an agent-driven change (or one made from another client)
+--- is reflected in the header without a re-attach. The set commands already
+--- apply their own result; this covers changes the plugin did not initiate.
+--- Non-config events are ignored.
+--- @param session tend.commands.Session
+--- @param event table daemon event envelope
+function Context:apply_session_updates(session, event)
+    local payload = type(event.payload) == "table" and event.payload or {}
+    if event.type == "agent_model_updated" then
+        self:apply_session_config(
+            session.session_id,
+            { model_id = payload.current_model_id }
+        )
+    elseif event.type == "agent_mode_updated" then
+        self:apply_session_config(
+            session.session_id,
+            { mode_id = payload.current_mode_id }
+        )
+    elseif event.type == "agent_thought_level_updated" then
+        self:apply_session_config(
+            session.session_id,
+            { thought_level_id = payload.current_thought_level_id }
+        )
+    end
 end
 
 --- @private
@@ -1158,7 +1271,7 @@ function Context:session_new()
 end
 
 --- @private
---- @param s table api.SessionInfo
+--- @param s tend.commands.SessionInfo
 --- @return string
 local function session_label(s)
     local label = s.session_id
@@ -1178,11 +1291,12 @@ end
 --- @private
 --- Fetch the daemon's sessions (scoped to the current workspace when one is
 --- open) and pass them to cb; reports and skips cb when there are none.
---- @param cb fun(sessions: table[])
+--- @param cb fun(sessions: tend.commands.SessionInfo[])
 function Context:with_sessions(cb)
     local ws = self.workspace
     local params = ws and { workspace_id = ws.workspace_id } or {}
     self:call("session.list", params, function(result)
+        --- @type tend.commands.SessionInfo[]
         local list = result.sessions or {}
         if #list == 0 then
             report("tend: no active sessions; run :TendSessionNew to start one")
@@ -1194,7 +1308,7 @@ end
 
 --- @private
 --- Track a session (idempotent) and make it the focused one.
---- @param s table api.SessionInfo
+--- @param s tend.commands.SessionInfo
 --- @return tend.commands.Session
 function Context:focus_session(s)
     local session = self:track_session({
@@ -1206,11 +1320,13 @@ function Context:focus_session(s)
         -- older daemon.
         workspace_id = s.workspace_id or (s.task and s.task.workspace_id) or "",
     })
-    -- The daemon's SessionInfo carries the authoritative current model/mode;
-    -- record them so the chat header reflects the configuration on attach.
+    -- The daemon's SessionInfo carries the authoritative current model / mode /
+    -- thought level; record them so the chat header reflects the configuration on
+    -- attach.
     session.provider_id = s.provider_id or session.provider_id
     session.model_id = s.current_model_id
     session.mode_id = s.current_mode_id
+    session.thought_level_id = s.current_thought_level_id
     self.active = s.session_id
     return session
 end
@@ -1289,37 +1405,41 @@ function Context:deliver_task(task)
     local ws = self.workspace
     local params = ws and { workspace_id = ws.workspace_id } or {}
     self:call("session.list", params, function(result)
+        --- @type tend.commands.SessionInfo[]
         local sessions = result.sessions or {}
-        -- A synthetic "new session" target leads the list so it is always
-        -- reachable, including when there are no running sessions.
-        local new_target = { __new = true }
-        local options = { new_target }
+        -- Each option wraps either a session or the synthetic "new session"
+        -- choice (leading the list so it is always reachable, including when no
+        -- sessions are running). Wrapping keeps the list one honest type, so the
+        -- picked target narrows on its `session` field with no cast.
+        --- @type tend.commands.DeliverTarget[]
+        local options = { { session = nil } }
         for _, s in ipairs(sessions) do
-            table.insert(options, s)
+            table.insert(options, { session = s })
         end
         vim.ui.select(options, {
             prompt = "Deliver " .. task.ref.id .. " to",
             format_item = function(o)
-                if o.__new then
-                    return "+ New session"
+                if o.session then
+                    return session_label(o.session)
                 end
-                return session_label(o)
+                return "+ New session"
             end,
         }, function(choice)
             if not choice then
                 return
             end
-            if choice.__new then
+            local session_info = choice.session
+            if not session_info then
                 self:start_session_for_task(task)
             else
-                local session = self:focus_session(choice)
+                local session = self:focus_session(session_info)
                 self:show_session(session, false)
                 self:prompt_turn(task_prompt(task))
                 info(
                     "tend: delegated "
                         .. task.ref.id
                         .. " to session "
-                        .. choice.session_id
+                        .. session_info.session_id
                 )
             end
         end)

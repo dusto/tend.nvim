@@ -110,24 +110,34 @@ local function base_of(uri)
     return { content_hash = vim.fn.sha256(bytes) }
 end
 
---- Issue a synchronous LSP request on bufnr, returning the first non-nil result
---- across attached clients (or nil).
+--- Issue a synchronous LSP request on bufnr, returning every attached client's
+--- non-nil result in stable client-id order. A buffer can have several clients
+--- (a language server plus a linter, or two servers for one filetype), and each
+--- may contribute results; callers aggregate across all of them so the first
+--- client's answer never hides the rest.
 --- @param bufnr integer
 --- @param method string
 --- @param params table
---- @return any result
-local function request(bufnr, method, params)
+--- @return any[] results
+local function request_all(bufnr, method, params)
     local responses =
         vim.lsp.buf_request_sync(bufnr, method, params, REQUEST_TIMEOUT_MS)
     if not responses then
-        return nil
+        return {}
     end
-    for _, r in pairs(responses) do
-        if r.result ~= nil then
-            return r.result
+    local ids = {}
+    for id in pairs(responses) do
+        ids[#ids + 1] = id
+    end
+    table.sort(ids)
+    local out = {}
+    for _, id in ipairs(ids) do
+        local r = responses[id]
+        if r and r.result ~= nil then
+            out[#out + 1] = r.result
         end
     end
-    return nil
+    return out
 end
 
 --- @return table result EditorCurrentBufferResult { uri }
@@ -165,17 +175,19 @@ function LspProvider:symbols(uri)
     if not open then
         return { uri = buf_uri, open = false, symbols = {} }
     end
-    local res = request(bufnr, "textDocument/documentSymbol", {
-        textDocument = { uri = buf_uri },
-    })
     local get_line = function(row)
         return buf_line(bufnr, row)
     end
-    return {
-        uri = buf_uri,
-        open = true,
-        symbols = Wire.symbols_to_wire(res, get_line, encoding(bufnr)),
-    }
+    local enc = encoding(bufnr)
+    local symbols = {}
+    for _, res in
+        ipairs(request_all(bufnr, "textDocument/documentSymbol", {
+            textDocument = { uri = buf_uri },
+        }))
+    do
+        vim.list_extend(symbols, Wire.symbols_to_wire(res, get_line, enc))
+    end
+    return { uri = buf_uri, open = true, symbols = symbols }
 end
 
 --- @param uri string|nil
@@ -190,15 +202,17 @@ function LspProvider:definition(uri, position)
     local lsp_pos = Wire.wire_pos_to_lsp(position, function(row)
         return buf_line(bufnr, row)
     end, enc)
-    local res = request(bufnr, "textDocument/definition", {
-        textDocument = { uri = buf_uri },
-        position = lsp_pos,
-    })
-    return {
-        uri = buf_uri,
-        open = true,
-        locations = Wire.locations_to_wire(res, line_reader(), enc),
-    }
+    local reader = line_reader()
+    local locations = {}
+    for _, res in
+        ipairs(request_all(bufnr, "textDocument/definition", {
+            textDocument = { uri = buf_uri },
+            position = lsp_pos,
+        }))
+    do
+        vim.list_extend(locations, Wire.locations_to_wire(res, reader, enc))
+    end
+    return { uri = buf_uri, open = true, locations = locations }
 end
 
 --- @param uri string|nil
@@ -214,16 +228,18 @@ function LspProvider:references(uri, position, include_declaration)
     local lsp_pos = Wire.wire_pos_to_lsp(position, function(row)
         return buf_line(bufnr, row)
     end, enc)
-    local res = request(bufnr, "textDocument/references", {
-        textDocument = { uri = buf_uri },
-        position = lsp_pos,
-        context = { includeDeclaration = include_declaration == true },
-    })
-    return {
-        uri = buf_uri,
-        open = true,
-        locations = Wire.locations_to_wire(res, line_reader(), enc),
-    }
+    local reader = line_reader()
+    local locations = {}
+    for _, res in
+        ipairs(request_all(bufnr, "textDocument/references", {
+            textDocument = { uri = buf_uri },
+            position = lsp_pos,
+            context = { includeDeclaration = include_declaration == true },
+        }))
+    do
+        vim.list_extend(locations, Wire.locations_to_wire(res, reader, enc))
+    end
+    return { uri = buf_uri, open = true, locations = locations }
 end
 
 --- @param uri string|nil
@@ -238,10 +254,12 @@ function LspProvider:hover(uri, position)
     local get_line = function(row)
         return buf_line(bufnr, row)
     end
-    local res = request(bufnr, "textDocument/hover", {
+    -- Hover is a point query; the first client that answers wins rather than
+    -- concatenating several servers' prose at one cursor position.
+    local res = request_all(bufnr, "textDocument/hover", {
         textDocument = { uri = buf_uri },
         position = Wire.wire_pos_to_lsp(position, get_line, enc),
-    })
+    })[1]
     local out = {
         uri = buf_uri,
         open = true,
@@ -267,18 +285,23 @@ function LspProvider:code_actions(uri, range, only)
     if only and #only > 0 then
         context.only = only
     end
-    local res = request(bufnr, "textDocument/codeAction", {
-        textDocument = { uri = buf_uri },
-        range = Wire.wire_range_to_lsp(range, function(row)
-            return buf_line(bufnr, row)
-        end, enc),
-        context = context,
-    })
-    return {
-        uri = buf_uri,
-        open = true,
-        actions = Wire.code_actions_to_wire(res, line_reader(), base_of, enc),
-    }
+    local reader = line_reader()
+    local actions = {}
+    for _, res in
+        ipairs(request_all(bufnr, "textDocument/codeAction", {
+            textDocument = { uri = buf_uri },
+            range = Wire.wire_range_to_lsp(range, function(row)
+                return buf_line(bufnr, row)
+            end, enc),
+            context = context,
+        }))
+    do
+        vim.list_extend(
+            actions,
+            Wire.code_actions_to_wire(res, reader, base_of, enc)
+        )
+    end
+    return { uri = buf_uri, open = true, actions = actions }
 end
 
 return M

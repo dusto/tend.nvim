@@ -69,4 +69,33 @@ describe("tend.daemon.lsp_provider", function()
         assert.equal("undefined global", res.diagnostics[1].message)
         assert.equal(10, res.diagnostics[1].range.start.byte_col)
     end)
+
+    it("code_actions aggregates results across multiple LSP clients", function()
+        -- A buffer can have several attached clients; each may return code
+        -- actions, and none must hide the others. Stub the sync request with a
+        -- two-client response and expect both actions to survive.
+        local prov = LspProviderMod.LspProvider.new()
+        local buf, uri = make_file_buffer({ "local x = 1" })
+        vim.api.nvim_set_current_buf(buf)
+        local original = vim.lsp.buf_request_sync
+        --- @diagnostic disable-next-line: duplicate-set-field
+        vim.lsp.buf_request_sync = function()
+            return {
+                [7] = { result = { { title = "fix A", kind = "quickfix" } } },
+                [3] = { result = { { title = "fix B", kind = "quickfix" } } },
+            }
+        end
+        local ok, res = pcall(function()
+            return prov:code_actions(uri, {
+                start = { line = 0, byte_col = 0 },
+                ["end"] = { line = 0, byte_col = 0 },
+            }, nil)
+        end)
+        vim.lsp.buf_request_sync = original
+        assert.is_true(ok)
+        assert.equal(2, #res.actions)
+        -- Stable client-id order: client 3 before client 7.
+        assert.equal("fix B", res.actions[1].title)
+        assert.equal("fix A", res.actions[2].title)
+    end)
 end)

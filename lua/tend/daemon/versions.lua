@@ -22,7 +22,12 @@ M.REQUIRED = {
     -- handshake, not mid-session when a command first runs a missing method.
     plugin_to_daemon = "0.16.0",
     -- The plugin serves editor.open / editor.diff (daemon->editor 0.2.0); pin it
-    -- so we never try to render a diff payload a too-old daemon cannot send.
+    -- so we never try to render a diff payload a too-old daemon cannot send. The
+    -- plugin also serves the editor LSP surface (editor.current_buffer +
+    -- diagnostics/symbols/definition/references/hover at 0.4.0, code_actions at
+    -- 0.5.0), but those are reactive: an older daemon simply never calls them, so
+    -- the required minimum stays 0.2.0 rather than rejecting a daemon that is
+    -- otherwise fine for diff/open.
     daemon_to_editor = "0.2.0",
     -- 0.7.0 added agent_thought_level_updated, which the header consumes to keep
     -- the thought level live (0.6.0 added slash_commands_updated for the prompt's

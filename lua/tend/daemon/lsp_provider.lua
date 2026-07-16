@@ -9,6 +9,7 @@
 --- loading the file or spinning up an LSP client — the daemon owns the
 --- closed-file story (a future workspace index), and a headless session never
 --- reaches here (the daemon returns editor_unavailable at the binding layer).
+local FileBase = require("tend.daemon.file_base")
 local Wire = require("tend.daemon.lsp_wire")
 
 local M = {}
@@ -24,21 +25,6 @@ M.LspProvider = LspProvider
 --- @return tend.daemon.LspProvider
 function LspProvider.new()
     return setmetatable({}, LspProvider)
-end
-
---- Resolve a wire URI to a buffer. An empty URI means the active buffer.
---- @param uri string|nil
---- @return integer bufnr
---- @return boolean open whether the buffer is loaded (editor-fresh)
---- @return string buf_uri the buffer's own URI
-local function resolve(uri)
-    local bufnr
-    if uri == nil or uri == "" then
-        bufnr = vim.api.nvim_get_current_buf()
-    else
-        bufnr = vim.uri_to_bufnr(uri)
-    end
-    return bufnr, vim.api.nvim_buf_is_loaded(bufnr), vim.uri_from_bufnr(bufnr)
 end
 
 --- @param bufnr integer
@@ -61,20 +47,6 @@ local function encoding(bufnr)
     return "utf-16"
 end
 
---- Read a closed file's raw bytes (exactly, including a trailing newline) so a
---- content hash matches the daemon's `crypto/sha256` over the same bytes.
---- @param path string
---- @return string|nil bytes
-local function read_bytes(path)
-    local f = io.open(path, "rb")
-    if not f then
-        return nil
-    end
-    local data = f:read("*a")
-    f:close()
-    return data
-end
-
 --- A line reader spanning any URI (loaded buffer or, failing that, the file on
 --- disk), memoized per call so a multi-location result reads each file once. Used
 --- to convert result ranges that may point at files other than the queried one.
@@ -88,26 +60,13 @@ local function line_reader()
             if vim.api.nvim_buf_is_loaded(b) then
                 lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
             else
-                local bytes = read_bytes(vim.uri_to_fname(uri))
+                local bytes = FileBase.read_bytes(vim.uri_to_fname(uri))
                 lines = bytes and vim.split(bytes, "\n", { plain = true }) or {}
             end
             cache[uri] = lines
         end
         return lines[row + 1] or ""
     end
-end
-
---- The FileBase for a change target: a changedtick for an open buffer, else a
---- SHA-256 content hash of the file's bytes — matching the daemon's verifyBase.
---- @param uri string
---- @return table base wire FileBase
-local function base_of(uri)
-    local b = vim.uri_to_bufnr(uri)
-    if vim.api.nvim_buf_is_loaded(b) then
-        return { changedtick = vim.api.nvim_buf_get_changedtick(b) }
-    end
-    local bytes = read_bytes(vim.uri_to_fname(uri)) or ""
-    return { content_hash = vim.fn.sha256(bytes) }
 end
 
 --- Issue a synchronous LSP request on bufnr, returning every attached client's
@@ -157,7 +116,7 @@ end
 --- @param uri string|nil
 --- @return table result EditorDiagnosticsResult
 function LspProvider:diagnostics(uri)
-    local bufnr, open, buf_uri = resolve(uri)
+    local bufnr, open, buf_uri = FileBase.resolve(uri)
     if not open then
         return { uri = buf_uri, open = false, diagnostics = {} }
     end
@@ -171,7 +130,7 @@ end
 --- @param uri string|nil
 --- @return table result EditorSymbolsResult
 function LspProvider:symbols(uri)
-    local bufnr, open, buf_uri = resolve(uri)
+    local bufnr, open, buf_uri = FileBase.resolve(uri)
     if not open then
         return { uri = buf_uri, open = false, symbols = {} }
     end
@@ -194,7 +153,7 @@ end
 --- @param position table wire Position { line, byte_col }
 --- @return table result EditorDefinitionResult
 function LspProvider:definition(uri, position)
-    local bufnr, open, buf_uri = resolve(uri)
+    local bufnr, open, buf_uri = FileBase.resolve(uri)
     if not open then
         return { uri = buf_uri, open = false, locations = {} }
     end
@@ -220,7 +179,7 @@ end
 --- @param include_declaration boolean|nil
 --- @return table result EditorReferencesResult
 function LspProvider:references(uri, position, include_declaration)
-    local bufnr, open, buf_uri = resolve(uri)
+    local bufnr, open, buf_uri = FileBase.resolve(uri)
     if not open then
         return { uri = buf_uri, open = false, locations = {} }
     end
@@ -246,7 +205,7 @@ end
 --- @param position table wire Position
 --- @return table result EditorHoverResult
 function LspProvider:hover(uri, position)
-    local bufnr, open, buf_uri = resolve(uri)
+    local bufnr, open, buf_uri = FileBase.resolve(uri)
     if not open then
         return { uri = buf_uri, open = false, contents = "" }
     end
@@ -276,7 +235,7 @@ end
 --- @param only string[]|nil requested CodeActionKinds
 --- @return table result EditorCodeActionsResult
 function LspProvider:code_actions(uri, range, only)
-    local bufnr, open, buf_uri = resolve(uri)
+    local bufnr, open, buf_uri = FileBase.resolve(uri)
     if not open then
         return { uri = buf_uri, open = false, actions = {} }
     end
@@ -298,7 +257,7 @@ function LspProvider:code_actions(uri, range, only)
     do
         vim.list_extend(
             actions,
-            Wire.code_actions_to_wire(res, reader, base_of, enc)
+            Wire.code_actions_to_wire(res, reader, FileBase.base_of, enc)
         )
     end
     return { uri = buf_uri, open = true, actions = actions }

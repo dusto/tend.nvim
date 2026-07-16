@@ -13,6 +13,7 @@
 local Logger = require("tend.utils.logger")
 local ApprovalManager = require("tend.approval.manager")
 local EditorService = require("tend.daemon.editor_service")
+local FileService = require("tend.daemon.file_service")
 local LspService = require("tend.daemon.lsp_service")
 local ProtocolLog = require("tend.daemon.protocol_log")
 local StreamSubscriber = require("tend.rpc.stream_subscriber")
@@ -35,6 +36,7 @@ M.ERR_NOT_CONNECTED = -32001
 --- @field approvals tend.approval.Manager
 --- @field editor tend.daemon.EditorService
 --- @field lsp tend.daemon.LspService Serves editor.* LSP reverse requests.
+--- @field files tend.daemon.FileService Serves editor.read_buffer/write_buffer.
 --- @field log tend.daemon.ProtocolLog plugin<->daemon wire activity for :TendEvents
 --- @field private client_id string
 --- @field private role string
@@ -70,6 +72,7 @@ M.Connection = Connection
 --- @field approvals? tend.approval.Manager
 --- @field editor? tend.daemon.EditorService Serves editor.* reverse requests.
 --- @field lsp? tend.daemon.LspService Serves editor.* LSP reverse requests.
+--- @field files? tend.daemon.FileService Serves editor.read_buffer/write_buffer.
 --- @field protocol_log? tend.daemon.ProtocolLog Records wire activity.
 
 --- @param opts? tend.daemon.ConnectionOpts
@@ -96,6 +99,7 @@ function Connection.new(opts)
         approvals = opts.approvals or ApprovalManager.Manager.new(),
         editor = opts.editor or EditorService.EditorService.new(),
         lsp = opts.lsp or LspService.LspService.new(),
+        files = opts.files or FileService.FileService.new(),
         log = opts.protocol_log or ProtocolLog.new(),
         client = nil,
         state = "disconnected",
@@ -254,6 +258,7 @@ function Connection:handshake(client)
             self.approvals:bootstrap(client)
             self.editor:bootstrap(client)
             self.lsp:bootstrap(client)
+            self.files:bootstrap(client)
             self:set_state("connected")
             local waiters = self.waiters
             self.waiters = {}

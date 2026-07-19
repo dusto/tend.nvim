@@ -11,6 +11,7 @@
 :TendSessionDisconnect	tend.txt	/*:TendSessionDisconnect*
 :TendSessionInfo	tend.txt	/*:TendSessionInfo*
 :TendSessionNew	tend.txt	/*:TendSessionNew*
+:TendSessionRename	tend.txt	/*:TendSessionRename*
 :TendTaskNew	tend.txt	/*:TendTaskNew*
 :TendTaskPick	tend.txt	/*:TendTaskPick*
 next	tend.txt	/*next*

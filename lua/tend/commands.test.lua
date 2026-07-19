@@ -1630,6 +1630,80 @@ describe("tend.commands", function()
         assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
     end)
 
+    it(
+        "TendSessionRename sets a label, sends the rename, and leads the header",
+        function()
+            child.lua([[
+            _G.give_session()
+            _G.replies["session.rename"] = { result = { session = {
+                session_id = "ses-1", label = "auth work",
+            } } }
+            _G.ui_input = "auth work"
+            _G.calls = {}
+            _G.ctx:session_rename()
+        ]])
+            local c = find_call(calls(), "session.rename")
+            assert.equal("ses-1", c.params.session_id)
+            assert.equal("auth work", c.params.label)
+            assert.equal(
+                "auth work",
+                child.lua_get("_G.ctx.sessions['ses-1'].label")
+            )
+            local headers = child.lua_get("_G.widget.headers")
+            assert.is_not_nil(
+                headers[#headers].context:find("auth work", 1, true)
+            )
+        end
+    )
+
+    it("TendSessionRename with empty input clears the label", function()
+        child.lua([[
+            _G.give_session()
+            _G.ctx.sessions["ses-1"].label = "old"
+            _G.replies["session.rename"] = { result = { session = {
+                session_id = "ses-1", label = "",
+            } } }
+            _G.ui_input = "   "
+            _G.calls = {}
+            _G.ctx:session_rename()
+        ]])
+        assert.equal("", find_call(calls(), "session.rename").params.label)
+        -- lua_get serializes a nil field as vim.NIL over RPC, so assert the clear
+        -- inside the child where nil is still nil.
+        assert.is_true(child.lua_get("_G.ctx.sessions['ses-1'].label == nil"))
+        assert.is_not_nil(last_notice().msg:find("cleared", 1, true))
+    end)
+
+    it("session_renamed keeps the label live without a rename call", function()
+        child.lua([[
+            _G.give_session()
+            _G.calls = {}
+            _G.ctx:apply_session_updates(_G.ctx.sessions["ses-1"], {
+                type = "session_renamed",
+                payload = { session_id = "ses-1", label = "renamed live" },
+            })
+        ]])
+        assert.same({}, calls())
+        assert.equal(
+            "renamed live",
+            child.lua_get("_G.ctx.sessions['ses-1'].label")
+        )
+        local headers = child.lua_get("_G.widget.headers")
+        assert.is_not_nil(
+            headers[#headers].context:find("renamed live", 1, true)
+        )
+    end)
+
+    it("TendSessionRename reports when no session is focused", function()
+        child.lua([[
+            _G.ctx:ensure_widget()
+            _G.calls = {}
+            _G.ctx:session_rename()
+        ]])
+        assert.same({}, calls())
+        assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
+    end)
+
     it("the switchers report when no session is focused", function()
         child.lua([[
             _G.ctx:ensure_widget()

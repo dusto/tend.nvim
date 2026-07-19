@@ -1087,8 +1087,10 @@ a task is delegated to the session (see |:TendTaskPick|).
 
                                                      *:TendSessionAttach*
 :TendSessionAttach
-  List the daemon's active sessions — each with its provider, task, and
-  status (idle/running/waiting_approval/...) — and focus the one you pick.
+  List the daemon's active sessions — each led by its name (a
+  |:TendSessionRename| label, else its task, else a short id) with its
+  provider and status (idle/running/waiting_approval/...) — and focus the
+  one you pick.
   Focusing follows the session's event stream (transcript) and makes
   |:TendChat| target it. The currently focused session
   is marked. A session started in this editor stays tracked; selecting it
@@ -1106,6 +1108,17 @@ a task is delegated to the session (see |:TendTaskPick|).
   detach from it — its event stream is unsubscribed and its transcript
   dropped. The session keeps running on the daemon (this is a client-side
   detach, not a stop), so |:TendSessionAttach| can pick it up again.
+
+                                                     *:TendSessionRename*
+:TendSessionRename
+  Set or clear the focused session's user-facing label. Prompts for a name
+  (pre-filled with the current label); submitting renames the session,
+  submitting an empty value clears it. The label is independent of the
+  session's task and leads the chat header and the |:TendSessionAttach|
+  switcher, so a task-less conversation session gets a readable identity
+  instead of a raw id. The change goes to the daemon (session.rename) and is
+  reflected wherever the session is named, including for other attached
+  clients. An over-long label is rejected by the daemon.
 
                                                        *:TendSessionInfo*
 :TendSessionInfo

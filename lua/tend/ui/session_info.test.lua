@@ -1,8 +1,9 @@
 local assert = require("tests.helpers.assert")
 
 --- The tests inspect the view's internal buf/win handles to verify rendering and
---- in-place refresh; those fields are private to production callers.
---- @diagnostic disable: invisible
+--- in-place refresh; those fields are private to production callers and typed
+--- optional, so poking them trips `invisible` and `param-type-mismatch`.
+--- @diagnostic disable: invisible, param-type-mismatch
 
 describe("tend.ui.session_info", function()
     local SessionInfo = require("tend.ui.session_info")
@@ -51,6 +52,26 @@ describe("tend.ui.session_info", function()
             )
         end
     )
+
+    it("show relocates the float to the current tab", function()
+        local start_tab = vim.api.nvim_get_current_tabpage()
+        local v = new_view()
+        v:show({ "a" })
+        local first_win = v.win
+        vim.cmd("tabnew")
+        v:show({ "b" })
+        -- The float now lives in the current (new) tab, and the old window is
+        -- gone rather than a stale, off-screen render.
+        assert.equal(
+            vim.api.nvim_get_current_tabpage(),
+            vim.api.nvim_win_get_tabpage(v.win)
+        )
+        assert.is_false(vim.api.nvim_win_is_valid(first_win))
+        v:close()
+        if vim.api.nvim_get_current_tabpage() ~= start_tab then
+            vim.cmd("tabclose")
+        end
+    end)
 
     it("refresh is a no-op when closed", function()
         local v = new_view()

@@ -38,12 +38,18 @@ function SessionInfoView:_render(lines)
     vim.bo[self.buf].modifiable = false
 end
 
---- Open the float (or re-render if already open) with the given lines.
+--- Open the float with the given lines. If it is already open in the current
+--- tabpage, re-render in place; if it is open in a *different* tabpage, relocate
+--- it to the current one (the single float follows the user), rather than
+--- silently re-rendering an off-screen window.
 --- @param lines string[]
 function SessionInfoView:show(lines)
     if self:is_open() then
-        self:_render(lines)
-        return
+        if self.tab_page_id == vim.api.nvim_get_current_tabpage() then
+            self:_render(lines)
+            return
+        end
+        self:close()
     end
 
     local buf = vim.api.nvim_create_buf(false, true)

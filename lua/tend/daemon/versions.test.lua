@@ -23,34 +23,35 @@ describe("tend.daemon.versions", function()
     it(
         "requires the daemon version of the newest contract it relies on",
         function()
-            -- The thought-level switcher relies on session.set_thought_level
-            -- (plugin_to_daemon 0.16.0); a daemon that predates it (e.g. 0.15.0,
-            -- which had agent.prompt content blocks but no thought-level axis)
-            -- must be rejected at the handshake, not fail later when the switcher
-            -- first runs the missing method.
+            -- :TendSessionRename relies on session.rename (plugin_to_daemon
+            -- 0.25.0); a daemon that predates it (e.g. 0.24.0, which had
+            -- session.resume_seed but no rename) must be rejected at the
+            -- handshake, not fail later when the command first runs the missing
+            -- method.
             assert.is_false(Versions.satisfies({
-                plugin_to_daemon = "0.15.0",
+                plugin_to_daemon = "0.24.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.7.0",
+                daemon_to_client = "0.13.0",
             }))
             assert.is_true(Versions.satisfies({
-                plugin_to_daemon = "0.16.0",
+                plugin_to_daemon = "0.25.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.7.0",
+                daemon_to_client = "0.13.0",
             }))
         end
     )
 
     it(
-        "requires the daemon->client version for the command-set event",
+        "requires the daemon->client version for the session-label event",
         function()
-            -- The header consumes agent_thought_level_updated (daemon_to_client
-            -- 0.7.0); an older event contract must be rejected at the handshake.
-            -- plugin_to_daemon is at the pin here so only daemon_to_client fails.
+            -- The header consumes session_renamed (daemon_to_client 0.13.0) to
+            -- keep a session's label live; an older event contract must be
+            -- rejected at the handshake. plugin_to_daemon is at the pin here so
+            -- only daemon_to_client fails.
             assert.is_false(Versions.satisfies({
-                plugin_to_daemon = "0.16.0",
+                plugin_to_daemon = "0.25.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.6.0",
+                daemon_to_client = "0.12.0",
             }))
         end
     )

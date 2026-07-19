@@ -12,15 +12,16 @@ local M = {}
 --- The minimum contract versions this plugin requires per method set.
 --- plugin_to_daemon 0.2.0 is the first version with task.*.
 M.REQUIRED = {
-    -- 0.16.0 added session.set_thought_level and the thought-level axis on
-    -- SessionInfo, which the thought-level switcher uses (0.15.0 added
+    -- 0.25.0 added session.rename (+ SessionInfo.label), which :TendSessionRename
+    -- calls (0.16.0 added session.set_thought_level and the thought-level axis on
+    -- SessionInfo, which the thought-level switcher uses; 0.15.0 added
     -- agent.prompt content blocks; 0.14.0 added slash.invoke; 0.13.0 added
     -- slash.complete; 0.12.0 added slash.list; 0.11.0 added provider.list; 0.10.0
     -- added session.set_model/set_mode; 0.9.0 made agent.start's task optional;
     -- 0.8.0 added session.list/claim; 0.6.0 added file.diff). Pin the highest
     -- contract this plugin relies on so an older daemon is rejected at the
     -- handshake, not mid-session when a command first runs a missing method.
-    plugin_to_daemon = "0.16.0",
+    plugin_to_daemon = "0.25.0",
     -- The plugin serves editor.open / editor.diff (daemon->editor 0.2.0); pin it
     -- so we never try to render a diff payload a too-old daemon cannot send. The
     -- plugin also serves the editor LSP surface (editor.current_buffer +
@@ -30,11 +31,13 @@ M.REQUIRED = {
     -- simply never calls them, so the required minimum stays 0.2.0 rather than
     -- rejecting a daemon that is otherwise fine for diff/open.
     daemon_to_editor = "0.2.0",
-    -- 0.7.0 added agent_thought_level_updated, which the header consumes to keep
-    -- the thought level live (0.6.0 added slash_commands_updated for the prompt's
-    -- completion source; 0.5.0 added agent_plan for the todos panel). Pin it so a
-    -- daemon that cannot push the thought-level event is rejected at the handshake.
-    daemon_to_client = "0.7.0",
+    -- 0.13.0 added session_renamed, which the header consumes to keep a session's
+    -- label live (0.7.0 added agent_thought_level_updated for the live thought
+    -- level; 0.6.0 added slash_commands_updated for the prompt's completion
+    -- source; 0.5.0 added agent_plan for the todos panel). Pin it so a daemon that
+    -- cannot push the label event is rejected at the handshake — the header would
+    -- otherwise silently miss label changes made by other clients.
+    daemon_to_client = "0.13.0",
 }
 
 --- @param s string|nil

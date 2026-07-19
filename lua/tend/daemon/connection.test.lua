@@ -79,9 +79,9 @@ describe("tend.daemon.connection", function()
             id = sent[1].id,
             result = {
                 versions = {
-                    plugin_to_daemon = "0.16.0",
+                    plugin_to_daemon = "0.28.0",
                     daemon_to_editor = "0.2.0",
-                    daemon_to_client = "0.7.0",
+                    daemon_to_client = "0.13.0",
                 },
                 daemon_epoch = epoch or "epoch-1",
             },
@@ -242,7 +242,7 @@ describe("tend.daemon.connection", function()
         accept(h, "epoch-9")
         local info = conn:info()
         assert.equal("connected", info.status)
-        assert.equal("0.16.0", info.versions.plugin_to_daemon)
+        assert.equal("0.28.0", info.versions.plugin_to_daemon)
         assert.equal("epoch-9", info.daemon_epoch)
         assert.is_nil(info.version_mismatch)
     end)

@@ -43,6 +43,8 @@ local M = {}
 --- @field plan? tend.wire.PlanEntry[] latest agent plan, rendered in the todos panel
 --- @field commands? tend.slash.Command[] merged slash-command set (provider + daemon)
 --- @field usage tend.session.Usage token/context accounting from usage events
+--- @field label? string user-assigned session label, leads the header/switcher
+--- @field task_id? string task this session serves (fallback identity when unlabelled)
 
 --- One selectable option the daemon advertises for a session selector — a mode,
 --- model, or thought level (api.SessionMode/SessionModel/SessionThoughtLevel,
@@ -63,6 +65,7 @@ local M = {}
 --- @field worktree_root? string
 --- @field stream_id? string
 --- @field status? string
+--- @field label? string user-assigned session label (empty when unset)
 --- @field task? table api.TaskRef
 --- @field pending? table api.SessionPending
 --- @field current_model_id? string
@@ -544,9 +547,30 @@ end
 
 --- @private
 --- Reflect a session's provider / model / mode / thought level in the chat panel
+--- The best human identity for a session: its user-assigned label, else the task
+--- id, else a short prefix of the raw session/stream id (marked with "#"). Shared
+--- by the chat header and the session switcher so a session reads the same
+--- everywhere, and so a task-less, unlabelled session still has a usable name.
+--- @param label string|nil
+--- @param task_id string|nil
+--- @param id string|nil session or stream id
+--- @return string
+local function session_name(label, task_id, id)
+    if label and label ~= "" then
+        return label
+    end
+    if task_id and task_id ~= "" then
+        return task_id
+    end
+    id = id or "?"
+    return "#" .. (#id > 8 and id:sub(1, 8) or id)
+end
+
 --- header, so the active configuration is visible without opening a switcher.
---- Skips empty parts (a session whose model/mode/thought the daemon has not
---- reported yet shows just the provider); a no-op when nothing is known.
+--- Leads with the session's name (label / task / short id) so the focused
+--- session is identifiable, then appends config parts, skipping empties (a
+--- session whose model/mode/thought the daemon has not reported yet shows just
+--- the name and provider).
 --- @param session tend.commands.Session
 function Context:render_session_header(session)
     if not self.widget then
@@ -561,6 +585,7 @@ function Context:render_session_header(session)
             table.insert(parts, value)
         end
     end
+    push(session_name(session.label, session.task_id, session.session_id))
     push(session.provider_id)
     push(session.model_id)
     push(session.mode_id)
@@ -678,6 +703,11 @@ function Context:register_commands()
             "TendSessionInfo",
             "session_info",
             "Show the focused session's token/context usage",
+        },
+        {
+            "TendSessionRename",
+            "session_rename",
+            "Set or clear the focused session's label",
         },
         { "TendChat", "chat", "Send a prompt to the focused session" },
         { "TendEvents", "events", "Show the plugin<->daemon protocol log" },
@@ -1195,6 +1225,18 @@ function Context:apply_session_updates(session, event)
             session.session_id,
             { thought_level_id = payload.current_thought_level_id }
         )
+    elseif event.type == "session_renamed" then
+        -- Keep the label live when it is set/cleared here or from another client
+        -- (an empty label is a clear, not the string ""). Refresh the header when
+        -- this is the focused session so the new name shows without a re-attach.
+        session.label = (
+            payload.label
+            and payload.label ~= ""
+            and payload.label
+        ) or nil
+        if self.active == session.session_id then
+            self:render_session_header(session)
+        end
     end
 end
 
@@ -1233,6 +1275,7 @@ function Context:session_info()
             session_id = session.session_id,
             provider_id = session.provider_id,
             model_id = session.model_id,
+            label = session.label,
         }
         for _, s in ipairs(list) do
             if s.session_id == session.session_id then
@@ -1243,6 +1286,48 @@ function Context:session_info()
         end
         self.info_shown = { session_id = session.session_id, header = header }
         self.info_view:show(Usage.render_lines(session.usage, header))
+    end)
+end
+
+--- Set or clear the focused session's user-facing label (session.rename): prompt
+--- for a name, pre-filled with the current label; submit to rename, or submit
+--- empty to clear it. The label leads the chat header and the session switcher,
+--- giving task-less sessions a readable identity. Backs |:TendSessionRename|;
+--- reports when no session is focused. The daemon rejects an over-long label,
+--- surfaced via the call's error path.
+function Context:session_rename()
+    local session = self:active_session()
+    if not session then
+        report("tend: no focused session; run :TendSessionNew")
+        return
+    end
+    vim.ui.input({
+        prompt = "Session label (empty clears): ",
+        default = session.label or "",
+    }, function(input)
+        if input == nil then
+            return -- cancelled
+        end
+        local label = vim.trim(input)
+        self:call("session.rename", {
+            session_id = session.session_id,
+            label = label,
+        }, function(result)
+            local applied = result and result.session and result.session.label
+                or label
+            session.label = (applied ~= "" and applied) or nil
+            -- Only touch the header when this session is still focused: the reply
+            -- is async, so the user may have switched sessions meanwhile, and the
+            -- header belongs to whoever is active now — not the renamed session.
+            if self.active == session.session_id then
+                self:render_session_header(session)
+            end
+            if session.label then
+                info("tend: session labelled '" .. session.label .. "'")
+            else
+                info("tend: session label cleared")
+            end
+        end)
     end)
 end
 
@@ -1345,11 +1430,15 @@ end
 --- @param s tend.commands.SessionInfo
 --- @return string
 local function session_label(s)
-    local label = s.session_id
-        .. " · "
-        .. (s.provider_id or "?")
-        .. " · "
-        .. (s.task and s.task.id or "no task")
+    local task_id = s.task and s.task.id or nil
+    local name = session_name(s.label, task_id, s.session_id)
+    local parts = { name, s.provider_id or "?" }
+    -- Show the task alongside a user label (so a labelled, tasked session still
+    -- reveals its task); skip it when the name already is the task or none exists.
+    if task_id and task_id ~= name then
+        table.insert(parts, task_id)
+    end
+    local label = table.concat(parts, " · ")
         .. " ["
         .. (s.status or "?")
         .. "]"
@@ -1398,6 +1487,10 @@ function Context:focus_session(s)
     session.model_id = s.current_model_id
     session.mode_id = s.current_mode_id
     session.thought_level_id = s.current_thought_level_id
+    -- The user-assigned label and task give the session a readable identity in
+    -- the header/switcher; an empty label is unset, not the string "".
+    session.label = (s.label and s.label ~= "" and s.label) or nil
+    session.task_id = s.task and s.task.id or session.task_id
     self.active = s.session_id
     return session
 end

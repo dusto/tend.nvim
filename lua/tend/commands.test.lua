@@ -1563,6 +1563,73 @@ describe("tend.commands", function()
         end
     )
 
+    local function info_text()
+        return child.lua_get(
+            "table.concat(vim.api.nvim_buf_get_lines(_G.ctx.info_view.buf, 0, -1, false), '\\n')"
+        )
+    end
+
+    it("usage events accumulate and TendSessionInfo renders them", function()
+        child.lua([[
+            _G.give_session()
+            local track = _G.conn.subscriber.tracked[1]
+            track.on_event({
+                type = "agent_context_usage",
+                payload = { session_id = "ses-1", used_tokens = 18240, window_tokens = 200000 },
+            })
+            track.on_event({
+                type = "agent_token_usage",
+                payload = { session_id = "ses-1", input_tokens = 1240, output_tokens = 380, total_tokens = 1620 },
+            })
+            _G.replies["session.list"] = { result = { sessions = {
+                { session_id = "ses-1", status = "running", task = { id = "auth" } },
+            } } }
+            _G.ctx:session_info()
+        ]])
+        assert.is_true(child.lua_get("_G.ctx.info_view:is_open()"))
+        local text = info_text()
+        assert.is_not_nil(text:find("Context window: 18.2k / 200.0k", 1, true))
+        assert.is_not_nil(text:find("Last turn: 1,240 in", 1, true))
+        assert.is_not_nil(text:find("Task: auth", 1, true))
+    end)
+
+    it("a usage event live-refreshes the open info float", function()
+        child.lua([[
+            _G.give_session()
+            _G.replies["session.list"] = { result = { sessions = {
+                { session_id = "ses-1", status = "running" },
+            } } }
+            _G.ctx:session_info()
+            _G.conn.subscriber.tracked[1].on_event({
+                type = "agent_token_usage",
+                payload = { session_id = "ses-1", input_tokens = 5, output_tokens = 5, total_tokens = 10 },
+            })
+        ]])
+        assert.is_not_nil(
+            info_text():find("Session total: 10 tokens across 1 turn", 1, true)
+        )
+    end)
+
+    it("TendSessionInfo degrades to a not-yet line before any usage", function()
+        child.lua([[
+            _G.give_session()
+            _G.replies["session.list"] = { result = { sessions = {
+                { session_id = "ses-1", status = "idle" },
+            } } }
+            _G.ctx:session_info()
+        ]])
+        assert.is_not_nil(info_text():find("No usage reported yet", 1, true))
+    end)
+
+    it("TendSessionInfo reports when no session is focused", function()
+        child.lua([[
+            _G.ctx:ensure_widget()
+            _G.calls = {}
+            _G.ctx:session_info()
+        ]])
+        assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
+    end)
+
     it("the switchers report when no session is focused", function()
         child.lua([[
             _G.ctx:ensure_widget()

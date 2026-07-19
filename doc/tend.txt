@@ -1107,6 +1107,19 @@ a task is delegated to the session (see |:TendTaskPick|).
   dropped. The session keeps running on the daemon (this is a client-side
   detach, not a stop), so |:TendSessionAttach| can pick it up again.
 
+                                                       *:TendSessionInfo*
+:TendSessionInfo
+  Open a live detail float for the focused session: its provider, model,
+  task, and status, plus the token and context usage the daemon reports.
+  It shows the context-window fill (used of the window, with a percent when
+  the provider reports the window size), the last turn's input/output/total
+  tokens, the session's running total across turns, and the daemon's
+  approximate estimate of the prompt text it composed (labeled `[approx]`,
+  since it is a model-agnostic heuristic, not a provider count). The numbers
+  update live while the float is open as new turns report usage. Before a
+  session has reported any usage it shows a "no usage yet" line rather than
+  a blank window. Press `q` or `<Esc>` to close.
+
                                                           *:TendChat*
 :TendChat
   Open (or focus) the chat widget on the focused session, cursor in the

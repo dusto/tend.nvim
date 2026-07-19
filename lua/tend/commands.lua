@@ -23,7 +23,9 @@ local Discovery = require("tend.persona.discovery")
 local FileList = require("tend.ui.file_list")
 local Logger = require("tend.utils.logger")
 local PromptContent = require("tend.prompt_content")
+local SessionInfoView = require("tend.ui.session_info")
 local TodoList = require("tend.ui.todo_list")
+local Usage = require("tend.session.usage")
 local WidgetLayout = require("tend.ui.widget_layout")
 
 local M = {}
@@ -40,6 +42,7 @@ local M = {}
 --- @field thought_level_id? string active reasoning/thought level, reflected in the header
 --- @field plan? tend.wire.PlanEntry[] latest agent plan, rendered in the todos panel
 --- @field commands? tend.slash.Command[] merged slash-command set (provider + daemon)
+--- @field usage tend.session.Usage token/context accounting from usage events
 
 --- One selectable option the daemon advertises for a session selector — a mode,
 --- model, or thought level (api.SessionMode/SessionModel/SessionThoughtLevel,
@@ -90,6 +93,8 @@ local M = {}
 --- @field active? string the focused session id; :TendChat targets it
 --- @field widget? tend.ui.ChatWidget the one chat widget, created on first session
 --- @field private todos? tend.ui.TodoList shared todos panel, created on first plan
+--- @field private info_view tend.ui.SessionInfoView live session usage detail float
+--- @field private info_shown? { session_id: string, header: tend.session.UsageHeader } session the info float currently renders
 --- @field private file_list? tend.ui.FileList referenced-files context, attached to the next turn
 --- @field private code_selection? tend.ui.CodeSelection code-selection context, attached to the next turn
 --- @field private diagnostics? tend.ui.DiagnosticsList diagnostics context, attached to the next turn
@@ -146,6 +151,8 @@ function M.setup(opts)
         active = nil,
         widget = nil,
         todos = nil,
+        info_view = SessionInfoView.SessionInfoView.new(),
+        info_shown = nil,
         widget_factory = opts.widget_factory
             or function(on_submit, on_switch, controls, slash, files)
                 return ChatWidget:new(
@@ -211,6 +218,8 @@ function Context:dispose()
     self.file_list = nil
     self.code_selection = nil
     self.diagnostics = nil
+    self.info_view:close()
+    self.info_shown = nil
 end
 
 --- @private
@@ -665,6 +674,11 @@ function Context:register_commands()
             "session_disconnect",
             "Stop following a session in this editor",
         },
+        {
+            "TendSessionInfo",
+            "session_info",
+            "Show the focused session's token/context usage",
+        },
         { "TendChat", "chat", "Send a prompt to the focused session" },
         { "TendEvents", "events", "Show the plugin<->daemon protocol log" },
         { "TendApprove", "approve", "Review pending approvals" },
@@ -1109,6 +1123,7 @@ function Context:track_session(spec)
         bufnr = bufnr,
         view = view,
         provider_id = spec.provider_id,
+        usage = Usage.Usage.new(),
     }
     self.sessions[spec.session_id] = session
     -- Replay the session's retained history into the fresh buffer: a session
@@ -1129,6 +1144,7 @@ function Context:track_session(spec)
             self:apply_plan(session, event)
             self:apply_commands(session, event)
             self:apply_session_updates(session, event)
+            self:apply_usage(session, event)
         end,
     })
     -- Prime the command set so "/" completes before the agent first advertises
@@ -1180,6 +1196,54 @@ function Context:apply_session_updates(session, event)
             { thought_level_id = payload.current_thought_level_id }
         )
     end
+end
+
+--- @private
+--- Fold a usage event (agent_prompt_usage / agent_token_usage /
+--- agent_context_usage) into the session's accounting, and live-refresh the
+--- detail float when it is showing this session. Non-usage events are ignored
+--- by Usage:apply, so this is cheap on the hot event path.
+--- @param session tend.commands.Session
+--- @param event table daemon event envelope
+function Context:apply_usage(session, event)
+    if not session.usage:apply(event) then
+        return
+    end
+    local shown = self.info_shown
+    if shown and shown.session_id == session.session_id then
+        self.info_view:refresh(Usage.render_lines(session.usage, shown.header))
+    end
+end
+
+--- Open a live detail float for the focused session: provider, model, task, and
+--- status, plus the token/context usage accumulated from the daemon's usage
+--- events. It updates live while open as new turns report usage, and degrades to
+--- a "no usage yet" line before anything is reported. Backs |:TendSessionInfo|.
+function Context:session_info()
+    local session = self:active_session()
+    if not session then
+        report("tend: no focused session; run :TendSessionNew")
+        return
+    end
+    -- Snapshot task/status from the daemon's listing (the tracked session record
+    -- does not carry them); usage then refreshes live from the event stream.
+    self:with_sessions(function(list)
+        --- @type tend.session.UsageHeader
+        local header = {
+            session_id = session.session_id,
+            provider_id = session.provider_id,
+            model_id = session.model_id,
+        }
+        for _, s in ipairs(list) do
+            if s.session_id == session.session_id then
+                header.task = s.task and s.task.id or nil
+                header.status = s.status
+                break
+            end
+        end
+        self.info_shown = { session_id = session.session_id, header = header }
+        self.info_view:show(Usage.render_lines(session.usage, header))
+    end)
 end
 
 --- @private

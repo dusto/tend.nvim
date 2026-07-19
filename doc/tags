@@ -9,6 +9,7 @@
 :TendProvider	tend.txt	/*:TendProvider*
 :TendSessionAttach	tend.txt	/*:TendSessionAttach*
 :TendSessionDisconnect	tend.txt	/*:TendSessionDisconnect*
+:TendSessionInfo	tend.txt	/*:TendSessionInfo*
 :TendSessionNew	tend.txt	/*:TendSessionNew*
 :TendTaskNew	tend.txt	/*:TendTaskNew*
 :TendTaskPick	tend.txt	/*:TendTaskPick*

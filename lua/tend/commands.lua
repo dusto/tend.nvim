@@ -24,6 +24,7 @@ local FileList = require("tend.ui.file_list")
 local Logger = require("tend.utils.logger")
 local PromptContent = require("tend.prompt_content")
 local SessionInfoView = require("tend.ui.session_info")
+local TaskForm = require("tend.ui.task_form")
 local TodoList = require("tend.ui.todo_list")
 local Usage = require("tend.session.usage")
 local WidgetLayout = require("tend.ui.widget_layout")
@@ -106,6 +107,7 @@ local M = {}
 --- @field private persona_dirs string[]
 --- @field private persona_sources? tend.persona.Source[]
 --- @field private widget_factory tend.commands.WidgetFactory
+--- @field private task_form { open: fun(opts: tend.ui.TaskForm.Opts) } task authoring form (injectable)
 local Context = {}
 Context.__index = Context
 M.Context = Context
@@ -118,6 +120,7 @@ M.Context = Context
 --- @field persona_sources? tend.persona.Source[] Harness agent import sources.
 --- @field connection? tend.daemon.Connection Injected connection (tests).
 --- @field widget_factory? tend.commands.WidgetFactory Injected chat widget (tests).
+--- @field task_form? { open: fun(opts: tend.ui.TaskForm.Opts) } Injected task form (tests).
 
 --- The context registered by the last setup() call, or nil before setup. A
 --- connection-scoped singleton by design: the daemon owns sessions and the
@@ -156,6 +159,7 @@ function M.setup(opts)
         todos = nil,
         info_view = SessionInfoView.SessionInfoView.new(),
         info_shown = nil,
+        task_form = opts.task_form or TaskForm,
         widget_factory = opts.widget_factory
             or function(on_submit, on_switch, controls, slash, files)
                 return ChatWidget:new(
@@ -756,24 +760,43 @@ function Context:need_workspace()
     return self.workspace
 end
 
---- Create a task (prompts for a title) and make it current.
+--- Create a task through an authoring form and make it current. The form
+--- collects the full ticket (title, description, acceptance criteria, labels,
+--- priority) so a delegated agent has real context, not just a title. Only the
+--- title is required; blank optional fields are omitted from the request (the
+--- daemon ignores fields a provider does not support).
 function Context:task_new()
     local ws = self:need_workspace()
     if not ws then
         return
     end
-    vim.ui.input({ prompt = "Task title: " }, function(title)
-        if not title or title == "" then
-            return
-        end
-        self:call("task.create", {
-            workspace_id = ws.workspace_id,
-            title = title,
-        }, function(task)
-            self.task = task
-            info("tend: created task " .. task.ref.id)
-        end)
-    end)
+    self.task_form.open({
+        on_invalid = function(reason)
+            report("tend: " .. reason)
+        end,
+        on_submit = function(fields)
+            local params = {
+                workspace_id = ws.workspace_id,
+                title = fields.title,
+            }
+            if fields.description ~= "" then
+                params.description = fields.description
+            end
+            if fields.acceptance_criteria ~= "" then
+                params.acceptance_criteria = fields.acceptance_criteria
+            end
+            if fields.priority ~= "" then
+                params.priority = fields.priority
+            end
+            if #fields.labels > 0 then
+                params.labels = fields.labels
+            end
+            self:call("task.create", params, function(task)
+                self.task = task
+                info("tend: created task " .. task.ref.id)
+            end)
+        end,
+    })
 end
 
 --- @private

@@ -1048,8 +1048,13 @@ a task is delegated to the session (see |:TendTaskPick|).
 
                                                           *:TendTaskNew*
 :TendTaskNew
-  Prompt for a title, create a task in the workspace's task provider, and
-  make it the current task.
+  Open an authoring form to create a task in the workspace's task provider,
+  and make it the current task. The form is an editable float with a
+  markdown-headed section per field — title, description, acceptance
+  criteria, labels (comma-separated), and priority (0-4) — so a delegated
+  agent gets a complete ticket, not just a title. Only the title is
+  required; blank fields are omitted (a provider ignores any it does not
+  support). Press `<C-s>` to submit, `q` or `<Esc>` to cancel.
 
                                                           *:TendTaskPick*
 :TendTaskPick

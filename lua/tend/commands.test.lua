@@ -152,12 +152,21 @@ describe("tend.commands", function()
                 return w
             end
 
+            -- A fake task-authoring form: captures the opts so a test can drive
+            -- on_submit/on_invalid directly instead of editing a real float.
+            _G.task_form = {
+                open = function(o)
+                    _G.form_opts = o
+                end,
+            }
+
             _G.ctx = require("tend.commands").setup({
                 connection = _G.conn,
                 providers = { "codex", "claude" },
                 assignee = "dustin",
                 persona_dirs = { "/tmp/tend-test-personas" },
                 widget_factory = _G.make_widget,
+                task_form = _G.task_form,
             })
 
             -- Providers come from the daemon (provider.list); default to the two
@@ -302,10 +311,9 @@ describe("tend.commands", function()
         assert.is_not_nil(last_notice().msg:find("TendConnect", 1, true))
     end)
 
-    it("TendTaskNew creates a task from the entered title", function()
+    it("TendTaskNew submits the full form to task.create", function()
         child.lua([[
             _G.give_workspace()
-            _G.ui_input = "fix the bug"
             _G.replies["task.create"] = {
                 result = {
                     ref = { provider = "beads", workspace_id = "ws-1", id = "t-9" },
@@ -314,24 +322,64 @@ describe("tend.commands", function()
                 },
             }
             vim.cmd("TendTaskNew")
+            _G.form_opts.on_submit({
+                title = "fix the bug",
+                description = "it crashes on 5xx",
+                acceptance_criteria = "no crash",
+                priority = "1",
+                labels = { "bug", "net" },
+            })
         ]])
         local sent = calls()
         assert.equal("task.create", sent[1].method)
-        assert.same(
-            { workspace_id = "ws-1", title = "fix the bug" },
-            sent[1].params
-        )
+        assert.same({
+            workspace_id = "ws-1",
+            title = "fix the bug",
+            description = "it crashes on 5xx",
+            acceptance_criteria = "no crash",
+            priority = "1",
+            labels = { "bug", "net" },
+        }, sent[1].params)
         assert.equal("t-9", child.lua_get("_G.ctx.task.ref.id"))
     end)
 
-    it("TendTaskNew aborts on an empty title", function()
+    it("TendTaskNew omits blank optional fields", function()
         child.lua([[
             _G.give_workspace()
-            _G.ui_input = nil
+            _G.replies["task.create"] = {
+                result = {
+                    ref = { provider = "beads", workspace_id = "ws-1", id = "t-2" },
+                    title = "just a title",
+                    status = "open",
+                },
+            }
             vim.cmd("TendTaskNew")
+            _G.form_opts.on_submit({
+                title = "just a title",
+                description = "",
+                acceptance_criteria = "",
+                priority = "",
+                labels = {},
+            })
         ]])
-        assert.same({}, calls())
+        assert.same(
+            { workspace_id = "ws-1", title = "just a title" },
+            calls()[1].params
+        )
     end)
+
+    it(
+        "TendTaskNew reports and does not submit when the form has no title",
+        function()
+            child.lua([[
+            _G.give_workspace()
+            vim.cmd("TendTaskNew")
+            _G.form_opts.on_invalid("a task needs a title")
+        ]])
+            assert.same({}, calls())
+            assert.is_not_nil(last_notice().msg:find("needs a title", 1, true))
+        end
+    )
 
     it("TendTaskPick delegates the picked task to a new session", function()
         child.lua([[

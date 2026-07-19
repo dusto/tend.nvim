@@ -186,9 +186,12 @@ function M.open(opts)
     BufHelpers.keymap_set(buf, "n", "q", cancel)
     BufHelpers.keymap_set(buf, "n", "<Esc>", cancel)
 
-    -- Land the cursor on the title body line, ready to type.
+    -- Land the cursor on the title body line. The form rests in normal mode
+    -- (not insert) so its cancel/submit keymaps fire on the first keypress: an
+    -- insert-mode start would make `q` type a literal "q" and `<Esc>` merely
+    -- leave insert, contradicting the documented cancel keys. `i`/`a` edits a
+    -- field; `<C-s>` submits from either mode.
     vim.api.nvim_win_set_cursor(win, { 2, 0 })
-    vim.cmd.startinsert()
     return handle
 end
 

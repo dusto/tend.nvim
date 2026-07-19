@@ -1054,7 +1054,8 @@ a task is delegated to the session (see |:TendTaskPick|).
   criteria, labels (comma-separated), and priority (0-4) — so a delegated
   agent gets a complete ticket, not just a title. Only the title is
   required; blank fields are omitted (a provider ignores any it does not
-  support). Press `<C-s>` to submit, `q` or `<Esc>` to cancel.
+  support). The form rests in normal mode: press `i`/`a` to edit a field,
+  `<C-s>` to submit (works while editing too), and `q` or `<Esc>` to cancel.
 
                                                           *:TendTaskPick*
 :TendTaskPick

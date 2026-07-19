@@ -92,6 +92,16 @@ describe("tend.ui.task_form", function()
             )
         end)
 
+        it(
+            "rests in normal mode so cancel/submit keys fire on first press",
+            function()
+                open({ on_submit = function() end })
+                -- Not insert: otherwise `q` would type a literal "q" and `<Esc>`
+                -- would only leave insert instead of cancelling.
+                assert.equal("n", vim.api.nvim_get_mode().mode)
+            end
+        )
+
         it("submit parses the buffer, calls on_submit, and closes", function()
             local got
             local h = open({

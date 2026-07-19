@@ -30,7 +30,7 @@ M.FakeDaemon = FakeDaemon
 M.VERSIONS = {
     plugin_to_daemon = "0.28.0",
     daemon_to_editor = "0.2.0",
-    daemon_to_client = "0.7.0",
+    daemon_to_client = "0.13.0",
 }
 
 -- Methods the fake daemon serves.

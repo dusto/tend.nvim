@@ -31,26 +31,27 @@ describe("tend.daemon.versions", function()
             assert.is_false(Versions.satisfies({
                 plugin_to_daemon = "0.24.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.7.0",
+                daemon_to_client = "0.13.0",
             }))
             assert.is_true(Versions.satisfies({
                 plugin_to_daemon = "0.25.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.7.0",
+                daemon_to_client = "0.13.0",
             }))
         end
     )
 
     it(
-        "requires the daemon->client version for the command-set event",
+        "requires the daemon->client version for the session-label event",
         function()
-            -- The header consumes agent_thought_level_updated (daemon_to_client
-            -- 0.7.0); an older event contract must be rejected at the handshake.
-            -- plugin_to_daemon is at the pin here so only daemon_to_client fails.
+            -- The header consumes session_renamed (daemon_to_client 0.13.0) to
+            -- keep a session's label live; an older event contract must be
+            -- rejected at the handshake. plugin_to_daemon is at the pin here so
+            -- only daemon_to_client fails.
             assert.is_false(Versions.satisfies({
                 plugin_to_daemon = "0.25.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.6.0",
+                daemon_to_client = "0.12.0",
             }))
         end
     )

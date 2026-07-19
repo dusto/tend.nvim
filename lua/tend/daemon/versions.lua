@@ -31,11 +31,13 @@ M.REQUIRED = {
     -- simply never calls them, so the required minimum stays 0.2.0 rather than
     -- rejecting a daemon that is otherwise fine for diff/open.
     daemon_to_editor = "0.2.0",
-    -- 0.7.0 added agent_thought_level_updated, which the header consumes to keep
-    -- the thought level live (0.6.0 added slash_commands_updated for the prompt's
-    -- completion source; 0.5.0 added agent_plan for the todos panel). Pin it so a
-    -- daemon that cannot push the thought-level event is rejected at the handshake.
-    daemon_to_client = "0.7.0",
+    -- 0.13.0 added session_renamed, which the header consumes to keep a session's
+    -- label live (0.7.0 added agent_thought_level_updated for the live thought
+    -- level; 0.6.0 added slash_commands_updated for the prompt's completion
+    -- source; 0.5.0 added agent_plan for the todos panel). Pin it so a daemon that
+    -- cannot push the label event is rejected at the handshake — the header would
+    -- otherwise silently miss label changes made by other clients.
+    daemon_to_client = "0.13.0",
 }
 
 --- @param s string|nil

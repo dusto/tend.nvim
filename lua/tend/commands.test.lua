@@ -1704,6 +1704,35 @@ describe("tend.commands", function()
         assert.is_not_nil(last_notice().msg:find("no focused session", 1, true))
     end)
 
+    it(
+        "TendSessionRename does not clobber the header when focus moved mid-rename",
+        function()
+            child.lua([[
+            _G.give_session()  -- ses-1 tracked + active
+            -- Hold the rename reply so we can switch focus before it lands.
+            _G.captured = nil
+            _G.conn.request = function(_, method, params, cb)
+                table.insert(_G.calls, { method = method, params = params })
+                if method == "session.rename" then
+                    _G.captured = cb
+                end
+            end
+            _G.ui_input = "A-label"
+            _G.ctx:session_rename()      -- targets ses-1, reply captured
+            _G.ctx.active = "ses-2"      -- user switched away meanwhile
+            _G.widget.headers = {}       -- clear so a new render is detectable
+            _G.captured(nil, { session = { session_id = "ses-1", label = "A-label" } })
+        ]])
+            -- The renamed session's label is still recorded...
+            assert.equal(
+                "A-label",
+                child.lua_get("_G.ctx.sessions['ses-1'].label")
+            )
+            -- ...but the header was not re-rendered, since ses-1 is no longer active.
+            assert.equal(0, child.lua_get("#_G.widget.headers"))
+        end
+    )
+
     it("the switchers report when no session is focused", function()
         child.lua([[
             _G.ctx:ensure_widget()

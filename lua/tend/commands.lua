@@ -1316,7 +1316,12 @@ function Context:session_rename()
             local applied = result and result.session and result.session.label
                 or label
             session.label = (applied ~= "" and applied) or nil
-            self:render_session_header(session)
+            -- Only touch the header when this session is still focused: the reply
+            -- is async, so the user may have switched sessions meanwhile, and the
+            -- header belongs to whoever is active now — not the renamed session.
+            if self.active == session.session_id then
+                self:render_session_header(session)
+            end
             if session.label then
                 info("tend: session labelled '" .. session.label .. "'")
             else

@@ -31,13 +31,16 @@ M.REQUIRED = {
     -- simply never calls them, so the required minimum stays 0.2.0 rather than
     -- rejecting a daemon that is otherwise fine for diff/open.
     daemon_to_editor = "0.2.0",
-    -- 0.13.0 added session_renamed, which the header consumes to keep a session's
-    -- label live (0.7.0 added agent_thought_level_updated for the live thought
-    -- level; 0.6.0 added slash_commands_updated for the prompt's completion
-    -- source; 0.5.0 added agent_plan for the todos panel). Pin it so a daemon that
-    -- cannot push the label event is rejected at the handshake — the header would
-    -- otherwise silently miss label changes made by other clients.
-    daemon_to_client = "0.13.0",
+    -- 1.0.0 moved approval_requested/approval_resolved off the session stream
+    -- onto the repo-wide workspace stream (the approval channel); this plugin now
+    -- subscribes there for live approvals (commands.lua Context:track_workspace).
+    -- It is a BREAKING major bump on the daemon side: a pre-1.0 daemon still emits
+    -- approvals on session streams, which this plugin no longer follows for
+    -- approvals, so it must be rejected at the handshake rather than silently
+    -- delivering no approval prompts. (0.13.0 added session_renamed, which the
+    -- header consumes to keep a session's label live; 0.7.0 added
+    -- agent_thought_level_updated; 0.6.0 slash_commands_updated; 0.5.0 agent_plan.)
+    daemon_to_client = "1.0.0",
 }
 
 --- @param s string|nil

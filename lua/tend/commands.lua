@@ -89,6 +89,7 @@ local M = {}
 --- @class tend.commands.Context
 --- @field conn tend.daemon.Connection
 --- @field workspace? table api.WorkspaceInfo
+--- @field private workspace_stream_id? string the tracked workspace stream (approval channel)
 --- @field task? table api.Task
 --- @field provider_id? string
 --- @field persona_id? string
@@ -192,6 +193,16 @@ local function info(msg)
     Logger.notify(msg, vim.log.levels.INFO)
 end
 
+--- The repo-wide workspace stream id, matching the daemon's api.WorkspaceStream
+--- ("workspace:<id>"). Unlike session streams (whose ids the daemon returns on
+--- session objects), the plugin derives this one from the workspace id.
+--- @private
+--- @param workspace_id string
+--- @return string stream_id
+local function workspace_stream(workspace_id)
+    return "workspace:" .. workspace_id
+end
+
 --- @private
 --- Request wrapper: daemon errors are reported, successes reach cb.
 --- @param method string
@@ -216,6 +227,10 @@ end
 --- Called by setup() when replacing the context, so the old connection cannot
 --- keep its client identity registered alongside the new one.
 function Context:dispose()
+    if self.workspace_stream_id then
+        self.conn.subscriber:untrack(self.workspace_stream_id)
+        self.workspace_stream_id = nil
+    end
     self.conn:stop()
     if self.widget then
         self.widget:destroy()
@@ -739,6 +754,7 @@ function Context:connect()
         local dir = vim.fn.getcwd()
         self:call("workspace.open", { dir = dir }, function(ws)
             self.workspace = ws
+            self:track_workspace(ws.workspace_id)
             info(
                 "tend: attached to "
                     .. ws.worktree_root
@@ -748,6 +764,27 @@ function Context:connect()
             )
         end)
     end)
+end
+
+--- @private
+--- Subscribe to the repo-wide workspace stream and route its events to the
+--- approval manager. Approvals broadcast on this stream (daemon >= 1.0.0),
+--- independent of which sessions the editor follows, so any pending approval —
+--- including one for an untracked session — surfaces live. The manager keys by
+--- approval_id and ignores non-approval event types, so this fanout is safe
+--- alongside the per-session one. Tracking once is durable: the subscriber
+--- re-subscribes it on every reconnect bootstrap.
+--- @param workspace_id string
+function Context:track_workspace(workspace_id)
+    local stream_id = workspace_stream(workspace_id)
+    self.workspace_stream_id = stream_id
+    self.conn.subscriber:track({
+        workspace_id = workspace_id,
+        stream_id = stream_id,
+        on_event = function(event)
+            self.conn.approvals:handle_event(event)
+        end,
+    })
 end
 
 --- @private
@@ -1184,16 +1221,16 @@ function Context:track_session(spec)
     -- transcript, not start blank. For a session just started here this is a
     -- no-op (its cursor is already at 0).
     self.conn.subscriber:reset_cursor(spec.workspace_id, spec.stream_id)
-    -- One stream, several consumers: the transcript renders every event, the
-    -- approval manager reacts to approval_requested/resolved, agent_plan events
-    -- feed the todos panel, and slash_commands_updated refreshes this session's
-    -- command set for prompt completion.
+    -- One stream, several consumers: the transcript renders every event,
+    -- agent_plan events feed the todos panel, and slash_commands_updated
+    -- refreshes this session's command set for prompt completion. Approvals are
+    -- NOT here — they broadcast on the workspace stream (see track_workspace),
+    -- independent of which sessions are followed.
     self.conn.subscriber:track({
         workspace_id = spec.workspace_id,
         stream_id = spec.stream_id,
         on_event = function(event)
             view:apply(event)
-            self.conn.approvals:handle_event(event)
             self:apply_plan(session, event)
             self:apply_commands(session, event)
             self:apply_session_updates(session, event)

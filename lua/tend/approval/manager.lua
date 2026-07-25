@@ -1,15 +1,20 @@
 --- Approval flow wiring over the daemon RPC client.
 ---
---- Receives prompt.raise notifications (kind "approval"; clarifications are not
---- this module's concern), normalizes the gate envelope + ApprovalDetail into
---- the model, and surfaces the view. Responses go through approval.respond —
---- the daemon re-verifies freshness on respond, so a stale/conflict error is
---- reported and the pending set re-synced rather than retried. sync() rebuilds
---- the pending set from approval.list: the connection owner calls bootstrap()
---- per connection, so a reconnect recovers approvals raised while detached.
---- Session-stream events keep the set honest: approval_resolved (any responder,
---- including daemon-side TTL expiry) clears an entry; approval_requested for an
---- unknown id means we attached mid-flight and triggers a sync.
+--- Approvals arrive as workspace-stream events (daemon >= 1.0.0): the connection
+--- owner subscribes to the workspace stream and fans approval_requested /
+--- approval_resolved here via handle_event, independent of which sessions the
+--- editor follows. These events are lightweight signals (ids + kind), so an
+--- approval_requested for an unknown id triggers sync() to pull the decision
+--- context from approval.list; approval_resolved (any responder, including
+--- daemon-side TTL expiry) clears the entry. sync() rebuilds the pending set
+--- from approval.list — the durable snapshot — and bootstrap() runs it per
+--- connection, so a reconnect recovers approvals raised while detached. Responses
+--- go through approval.respond; the daemon re-verifies freshness on respond, so a
+--- stale/conflict error is reported and the set re-synced rather than retried.
+---
+--- (handle_prompt still accepts a prompt.raise of kind "approval" for backward
+--- compatibility, but daemon >= 1.0.0 no longer raises approvals that way — it is
+--- the clarification transport now.)
 local Logger = require("tend.utils.logger")
 local Model = require("tend.approval.model")
 local ViewMod = require("tend.approval.view")
@@ -21,7 +26,7 @@ M.METHOD_PROMPT_RAISE = "prompt.raise"
 M.METHOD_LIST = "approval.list"
 M.METHOD_RESPOND = "approval.respond"
 
--- Session-stream event types this manager reacts to.
+-- Workspace-stream event types this manager reacts to.
 M.EVENT_REQUESTED = "approval_requested"
 M.EVENT_RESOLVED = "approval_resolved"
 
@@ -201,9 +206,9 @@ function Manager:handle_prompt(params)
     end
 end
 
---- Apply a session-stream event (approval_requested / approval_resolved).
---- The owner wires this from its stream subscription; other event types are
---- ignored.
+--- Apply a workspace-stream event (approval_requested / approval_resolved).
+--- The owner wires this from its workspace-stream subscription; other event
+--- types delivered on that stream (task_*, provider_*, memory_*) are ignored.
 --- @param event table event envelope with type + payload
 function Manager:handle_event(event)
     local payload = type(event.payload) == "table" and event.payload or {}

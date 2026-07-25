@@ -21,7 +21,9 @@ local DiagnosticsList = require("tend.ui.diagnostics_list")
 local DiffReview = require("tend.ui.diff_review")
 local Discovery = require("tend.persona.discovery")
 local FileList = require("tend.ui.file_list")
+local FloatingMessage = require("tend.ui.floating_message")
 local Logger = require("tend.utils.logger")
+local MemoryFormat = require("tend.memory.format")
 local PromptContent = require("tend.prompt_content")
 local SessionInfoView = require("tend.ui.session_info")
 local TaskForm = require("tend.ui.task_form")
@@ -729,6 +731,12 @@ function Context:register_commands()
             "Set or clear the focused session's label",
         },
         { "TendChat", "chat", "Send a prompt to the focused session" },
+        {
+            "TendMemory",
+            "memory_browse",
+            "Search and view the workspace's memories",
+            "?",
+        },
         { "TendEvents", "events", "Show the plugin<->daemon protocol log" },
         { "TendApprove", "approve", "Review pending approvals" },
         {
@@ -891,6 +899,72 @@ function Context:task_pick()
             self:deliver_task(task)
         end)
     end)
+end
+
+--- Search the workspace's memories and view one: prompt for a query (or take it
+--- as an argument), list the hits in a picker, and render the picked entry's
+--- full body in a float. Read-only. The daemon requires a non-empty query, so an
+--- empty term is reported rather than sent.
+--- @param arg string|nil search query
+function Context:memory_browse(arg)
+    local ws = self:need_workspace()
+    if not ws then
+        return
+    end
+    local function run(query)
+        if not query or query == "" then
+            report("tend: a memory search term is required")
+            return
+        end
+        self:call("memory.search", {
+            workspace_id = ws.workspace_id,
+            query = query,
+        }, function(result)
+            local hits = result.hits
+            if type(hits) ~= "table" or #hits == 0 then
+                report("tend: no memories match " .. query)
+                return
+            end
+            vim.ui.select(hits, {
+                prompt = "Memory",
+                format_item = MemoryFormat.hit_label,
+            }, function(hit)
+                if hit then
+                    self:show_memory(ws.workspace_id, hit.id)
+                end
+            end)
+        end)
+    end
+    if arg and arg ~= "" then
+        run(arg)
+    else
+        vim.ui.input({ prompt = "Memory search: " }, function(input)
+            run(input)
+        end)
+    end
+end
+
+--- @private
+--- Fetch a memory entry's full text and render it (markdown) in a float.
+--- @param workspace_id string
+--- @param id string
+function Context:show_memory(workspace_id, id)
+    self:call(
+        "memory.get",
+        { workspace_id = workspace_id, id = id },
+        function(result)
+            local entry = result.entry
+            if type(entry) ~= "table" then
+                report("tend: memory not found")
+                return
+            end
+            FloatingMessage.show({
+                body = MemoryFormat.entry_lines(entry),
+                title = " Memory ",
+                filetype = "markdown",
+            })
+        end
+    )
 end
 
 --- @private

@@ -371,6 +371,83 @@ describe("tend.commands", function()
         )
     end)
 
+    it("TendMemory requires a workspace", function()
+        child.lua([[vim.cmd("TendMemory")]])
+        assert.same({}, calls())
+        assert.is_not_nil(last_notice().msg:find("TendConnect", 1, true))
+    end)
+
+    it("TendMemory requires a search term", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.ui_input = ""
+            vim.cmd("TendMemory")
+        ]])
+        assert.same({}, calls())
+        assert.is_not_nil(last_notice().msg:find("search term", 1, true))
+    end)
+
+    it("TendMemory takes the query as an argument", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["memory.search"] = { result = { hits = {} } }
+            vim.cmd("TendMemory auth token")
+        ]])
+        local sent = calls()
+        assert.equal("memory.search", sent[1].method)
+        assert.equal("auth token", sent[1].params.query)
+        assert.equal("ws-1", sent[1].params.workspace_id)
+    end)
+
+    it("TendMemory reports when no memories match", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.replies["memory.search"] = { result = { hits = {} } }
+            _G.ui_input = "nothing"
+            vim.cmd("TendMemory")
+        ]])
+        local sent = calls()
+        assert.equal(1, #sent)
+        assert.equal("memory.search", sent[1].method)
+        assert.is_not_nil(last_notice().msg:find("no memories match", 1, true))
+    end)
+
+    it(
+        "TendMemory searches, picks a hit, and renders the entry in a float",
+        function()
+            child.lua([[
+            _G.give_workspace()
+            _G.replies["memory.search"] = {
+                result = { hits = {
+                    { id = "m1", title = "Auth flow", kind = "note",
+                      tags = { "auth" }, snippet = "token refreshed" },
+                } },
+            }
+            _G.replies["memory.get"] = {
+                result = { entry = {
+                    id = "m1", title = "Auth flow", kind = "note",
+                    tags = { "auth" }, text = "the full note body",
+                } },
+            }
+            _G.ui_input = "auth"
+            _G.ui_choice = 1
+            _G.float = nil
+            require("tend.ui.floating_message").show = function(opts)
+                _G.float = opts
+            end
+            vim.cmd("TendMemory")
+        ]])
+            local sent = calls()
+            assert.equal("memory.search", sent[1].method)
+            assert.equal("auth", sent[1].params.query)
+            assert.equal("memory.get", sent[2].method)
+            assert.equal("m1", sent[2].params.id)
+            assert.equal("ws-1", sent[2].params.workspace_id)
+            local body = child.lua_get("table.concat(_G.float.body, '\\n')")
+            assert.is_not_nil(body:find("the full note body", 1, true))
+        end
+    )
+
     it("TendTaskNew requires a workspace", function()
         child.lua([[vim.cmd("TendTaskNew")]])
         assert.same({}, calls())

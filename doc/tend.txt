@@ -1182,6 +1182,15 @@ Slash commands (prompt) ~
   nothing is pending. Approvals also surface on their own when the daemon
   raises them.
 
+                                                           *:TendMemory*
+:TendMemory [{query}]
+  Search the current workspace's memories and view one. Prompts for a
+  search term (or takes it as an argument), lists the matching entries in a
+  picker (title, kind, tags, and a snippet), and renders the picked entry's
+  full body — markdown — in a float (`q` or `<Esc>` to close). Read-only. A
+  search term is required (the daemon does not list all memories); reports
+  when nothing matches or no workspace is open (run |:TendConnect| first).
+
                                                       *:TendOpenChanges*
 :TendOpenChanges [{change_set_id}]
   Open a change set's files in buffers for in-place review. With no

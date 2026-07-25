@@ -135,8 +135,11 @@ describe("daemon smoke", function()
         assert.is_nil(start.task)
         assert.equal(child.lua_get("vim.fn.getcwd()"), start.worktree_root)
 
-        local subscribe = params("_G.daemon:calls_for('events.subscribe')[1]")
-        assert.equal("str-ses-1", subscribe.stream_id)
+        -- Attach subscribes the repo-wide workspace stream (the approval
+        -- channel) first; starting the session subscribes its stream next.
+        local subscribes = params("_G.daemon:calls_for('events.subscribe')")
+        assert.equal("workspace:ws-1", subscribes[1].stream_id)
+        assert.equal("str-ses-1", subscribes[2].stream_id)
 
         local prompt = params("_G.daemon:calls_for('agent.prompt')[1]")
         assert.equal("ses-1", prompt.session_id)
@@ -272,15 +275,27 @@ describe("daemon smoke", function()
             ):find("before the drop", 1, true) ~= nil]]))
 
         child.lua([[_G.daemon:drop()]])
-        -- The same identity re-registers and the tracked session stream is
-        -- re-subscribed from its cursor.
+        -- The same identity re-registers and every tracked stream is
+        -- re-subscribed from its cursor. Two streams are tracked (the workspace
+        -- approval channel + the session), so the initial two subscribes become
+        -- four after the reconnect bootstrap.
         assert.is_true(wait_for("#_G.daemon:calls_for('client.register') == 2"))
         assert.is_true(
-            wait_for("#_G.daemon:calls_for('events.subscribe') == 2")
+            wait_for("#_G.daemon:calls_for('events.subscribe') == 4")
         )
         local registers = params("_G.daemon:calls_for('client.register')")
         assert.equal(registers[1].client_id, registers[2].client_id)
-        local resubscribe = params("_G.daemon:calls_for('events.subscribe')[2]")
+        -- The session stream is re-subscribed from its cursor (last_seq 1). The
+        -- bootstrap re-subscribes tracked streams in unspecified order, so scan
+        -- the post-reconnect calls (3..) for the session one.
+        local resubscribe = params([[(function()
+            local subs = _G.daemon:calls_for('events.subscribe')
+            for i = 3, #subs do
+                if subs[i].stream_id == "str-ses-1" then
+                    return subs[i]
+                end
+            end
+        end)()]])
         assert.equal("str-ses-1", resubscribe.stream_id)
         assert.equal(1, resubscribe.last_seq)
 

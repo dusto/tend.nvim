@@ -31,27 +31,35 @@ describe("tend.daemon.versions", function()
             assert.is_false(Versions.satisfies({
                 plugin_to_daemon = "0.24.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.13.0",
+                daemon_to_client = "1.0.0",
             }))
             assert.is_true(Versions.satisfies({
                 plugin_to_daemon = "0.25.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.13.0",
+                daemon_to_client = "1.0.0",
             }))
         end
     )
 
     it(
-        "requires the daemon->client version for the session-label event",
+        "requires the workspace-stream approval channel (daemon->client 1.0.0)",
         function()
-            -- The header consumes session_renamed (daemon_to_client 0.13.0) to
-            -- keep a session's label live; an older event contract must be
-            -- rejected at the handshake. plugin_to_daemon is at the pin here so
-            -- only daemon_to_client fails.
+            -- Approvals now broadcast on the workspace stream (daemon_to_client
+            -- 1.0.0); a pre-1.0 daemon still emits them on session streams, which
+            -- the plugin no longer follows for approvals, so it must be rejected
+            -- at the handshake. This is a BREAKING major bump: any 0.x
+            -- daemon_to_client is incompatible even though numerically older is
+            -- "less". plugin_to_daemon is at the pin here so only daemon_to_client
+            -- decides.
             assert.is_false(Versions.satisfies({
                 plugin_to_daemon = "0.25.0",
                 daemon_to_editor = "0.2.0",
-                daemon_to_client = "0.12.0",
+                daemon_to_client = "0.13.0",
+            }))
+            assert.is_true(Versions.satisfies({
+                plugin_to_daemon = "0.25.0",
+                daemon_to_editor = "0.2.0",
+                daemon_to_client = "1.0.0",
             }))
         end
     )

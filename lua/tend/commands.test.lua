@@ -305,6 +305,72 @@ describe("tend.commands", function()
         end
     )
 
+    it(
+        "TendConnect subscribes to the workspace stream for live approvals",
+        function()
+            child.lua([[
+            _G.replies["workspace.open"] = {
+                result = { workspace_id = "ws-1", worktree_root = "/repo" },
+            }
+            vim.cmd("TendConnect")
+        ]])
+            -- No session is tracked yet, so the workspace stream is the only
+            -- tracked stream after connect.
+            assert.equal(
+                "workspace:ws-1",
+                child.lua_get("_G.conn.subscriber.tracked[1].stream_id")
+            )
+            assert.equal(
+                "ws-1",
+                child.lua_get("_G.conn.subscriber.tracked[1].workspace_id")
+            )
+        end
+    )
+
+    it(
+        "workspace-stream approvals route to the approval manager (no tracked session)",
+        function()
+            child.lua([[
+            _G.replies["workspace.open"] = {
+                result = { workspace_id = "ws-1", worktree_root = "/repo" },
+            }
+            vim.cmd("TendConnect")
+            -- An approval for a session the editor is NOT following, broadcast
+            -- on the workspace stream, reaches the approval manager.
+            _G.conn.subscriber.tracked[1].on_event({
+                type = "approval_requested",
+                payload = {
+                    approval_id = "appr-1",
+                    session_id = "ses-untracked",
+                    kind = "file_edit",
+                },
+            })
+        ]])
+            assert.equal(
+                "approval_requested",
+                child.lua_get("_G.conn.approvals.events[1].type")
+            )
+            assert.equal(
+                "appr-1",
+                child.lua_get("_G.conn.approvals.events[1].payload.approval_id")
+            )
+        end
+    )
+
+    it("dispose unsubscribes the workspace stream", function()
+        child.lua([[
+            _G.replies["workspace.open"] = {
+                result = { workspace_id = "ws-1", worktree_root = "/repo" },
+            }
+            vim.cmd("TendConnect")
+            _G.ctx:dispose()
+        ]])
+        assert.equal(
+            "workspace:ws-1",
+            child.lua_get("_G.conn.subscriber.untracked[1]")
+        )
+    end)
+
     it("TendTaskNew requires a workspace", function()
         child.lua([[vim.cmd("TendTaskNew")]])
         assert.same({}, calls())
@@ -630,7 +696,7 @@ describe("tend.commands", function()
         end
     )
 
-    it("session events fan out to the transcript and approvals", function()
+    it("session events fan out to the transcript", function()
         child.lua([[
             _G.give_session()
             _G.conn.subscriber.tracked[1].on_event({
@@ -650,10 +716,9 @@ describe("tend.commands", function()
             return table.concat(lines, "\n"):find("hello there", 1, true) ~= nil
         end)()]])
         assert.is_true(rendered)
-        assert.equal(
-            "agent_message_chunk",
-            child.lua_get("_G.conn.approvals.events[1].type")
-        )
+        -- Approvals do NOT ride the session stream anymore; the session fanout
+        -- never touches the approval manager.
+        assert.equal(0, child.lua_get("#_G.conn.approvals.events"))
     end)
 
     --- The todos buffer's rendered lines for the current widget.

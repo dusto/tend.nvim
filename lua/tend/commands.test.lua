@@ -159,6 +159,12 @@ describe("tend.commands", function()
                     _G.form_opts = o
                 end,
             }
+            -- Same for the memory note form.
+            _G.memory_form = {
+                open = function(o)
+                    _G.memory_opts = o
+                end,
+            }
 
             _G.ctx = require("tend.commands").setup({
                 connection = _G.conn,
@@ -167,6 +173,7 @@ describe("tend.commands", function()
                 persona_dirs = { "/tmp/tend-test-personas" },
                 widget_factory = _G.make_widget,
                 task_form = _G.task_form,
+                memory_form = _G.memory_form,
             })
 
             -- Providers come from the daemon (provider.list); default to the two
@@ -447,6 +454,63 @@ describe("tend.commands", function()
             assert.is_not_nil(body:find("the full note body", 1, true))
         end
     )
+
+    it("TendMemoryWrite requires a workspace", function()
+        child.lua([[vim.cmd("TendMemoryWrite")]])
+        assert.is_true(child.lua_get("_G.memory_opts == nil"))
+        assert.is_not_nil(last_notice().msg:find("TendConnect", 1, true))
+    end)
+
+    it("TendMemoryWrite writes a note on submit", function()
+        child.lua([[
+            _G.give_workspace()
+            vim.cmd("TendMemoryWrite")
+            _G.memory_opts.on_submit({
+                title = "Auth flow",
+                tags = { "auth", "api" },
+                body = "the token refreshes on 401",
+            })
+        ]])
+        local sent = calls()
+        assert.equal("memory.write", sent[1].method)
+        assert.equal("ws-1", sent[1].params.workspace_id)
+        assert.equal("note", sent[1].params.kind)
+        assert.equal("Auth flow", sent[1].params.title)
+        assert.same({ "auth", "api" }, sent[1].params.tags)
+        assert.equal("the token refreshes on 401", sent[1].params.text)
+        -- Workspace-level: no task binding when none is current.
+        assert.is_nil(sent[1].params.task)
+    end)
+
+    it("TendMemoryWrite binds the note to the current task", function()
+        child.lua([[
+            _G.give_workspace()
+            _G.give_task()
+            vim.cmd("TendMemoryWrite")
+            _G.memory_opts.on_submit({ title = "", tags = {}, body = "b" })
+        ]])
+        local sent = calls()
+        assert.equal("memory.write", sent[1].method)
+        assert.equal("t-1", sent[1].params.task.id)
+        -- An empty title is omitted (the daemon derives an id).
+        assert.is_nil(sent[1].params.title)
+    end)
+
+    it("TendMemoryWrite prefills the body from a selection range", function()
+        child.lua([[
+            _G.give_workspace()
+            local buf = vim.api.nvim_get_current_buf()
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+                "fact line 1",
+                "fact line 2",
+            })
+            vim.cmd("1,2TendMemoryWrite")
+        ]])
+        assert.equal(
+            "fact line 1\nfact line 2",
+            child.lua_get("_G.memory_opts.body")
+        )
+    end)
 
     it("TendTaskNew requires a workspace", function()
         child.lua([[vim.cmd("TendTaskNew")]])

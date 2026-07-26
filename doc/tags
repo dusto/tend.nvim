@@ -5,6 +5,7 @@
 :TendDiff	tend.txt	/*:TendDiff*
 :TendEvents	tend.txt	/*:TendEvents*
 :TendMemory	tend.txt	/*:TendMemory*
+:TendMemoryWrite	tend.txt	/*:TendMemoryWrite*
 :TendOpenChanges	tend.txt	/*:TendOpenChanges*
 :TendPersona	tend.txt	/*:TendPersona*
 :TendProvider	tend.txt	/*:TendProvider*

@@ -23,6 +23,7 @@ local Discovery = require("tend.persona.discovery")
 local FileList = require("tend.ui.file_list")
 local FloatingMessage = require("tend.ui.floating_message")
 local Logger = require("tend.utils.logger")
+local MemoryForm = require("tend.ui.memory_form")
 local MemoryFormat = require("tend.memory.format")
 local PromptContent = require("tend.prompt_content")
 local SessionInfoView = require("tend.ui.session_info")
@@ -111,6 +112,7 @@ local M = {}
 --- @field private persona_sources? tend.persona.Source[]
 --- @field private widget_factory tend.commands.WidgetFactory
 --- @field private task_form { open: fun(opts: tend.ui.TaskForm.Opts) } task authoring form (injectable)
+--- @field private memory_form { open: fun(opts: tend.ui.MemoryForm.Opts) } memory note form (injectable)
 local Context = {}
 Context.__index = Context
 M.Context = Context
@@ -124,6 +126,7 @@ M.Context = Context
 --- @field connection? tend.daemon.Connection Injected connection (tests).
 --- @field widget_factory? tend.commands.WidgetFactory Injected chat widget (tests).
 --- @field task_form? { open: fun(opts: tend.ui.TaskForm.Opts) } Injected task form (tests).
+--- @field memory_form? { open: fun(opts: tend.ui.MemoryForm.Opts) } Injected memory form (tests).
 
 --- The context registered by the last setup() call, or nil before setup. A
 --- connection-scoped singleton by design: the daemon owns sessions and the
@@ -163,6 +166,7 @@ function M.setup(opts)
         info_view = SessionInfoView.SessionInfoView.new(),
         info_shown = nil,
         task_form = opts.task_form or TaskForm,
+        memory_form = opts.memory_form or MemoryForm,
         widget_factory = opts.widget_factory
             or function(on_submit, on_switch, controls, slash, files)
                 return ChatWidget:new(
@@ -753,6 +757,21 @@ function Context:register_commands()
             self[method](self, cmd.args ~= "" and cmd.args or nil)
         end, { desc = desc, nargs = nargs or 0 })
     end
+
+    -- :TendMemoryWrite takes a range so a visual selection prefills the note
+    -- body; the shared loop above does not wire range, so register it here.
+    vim.api.nvim_create_user_command("TendMemoryWrite", function(cmd)
+        local body = nil
+        if cmd.range > 0 then
+            local lines =
+                vim.api.nvim_buf_get_lines(0, cmd.line1 - 1, cmd.line2, false)
+            body = table.concat(lines, "\n")
+        end
+        self:memory_write({ body = body })
+    end, {
+        desc = "Write a workspace memory note (a selection prefills the body)",
+        range = true,
+    })
 end
 
 --- Connect to the daemon and open the cwd workspace.
@@ -965,6 +984,49 @@ function Context:show_memory(workspace_id, id)
             })
         end
     )
+end
+
+--- Write a workspace memory note through an authoring form (title, tags, body).
+--- The note binds to the current task when one is focused, else it is a
+--- workspace-level note. memory.write is an upsert (the daemon derives an id from
+--- the title, or generates one) and is not approval-gated. An optional body
+--- prefills the form — a visual selection captured as a note.
+--- @param opts? { body?: string }
+function Context:memory_write(opts)
+    local ws = self:need_workspace()
+    if not ws then
+        return
+    end
+    local task = self.task
+    self.memory_form.open({
+        body = opts and opts.body,
+        task_label = task and task.ref and task.ref.id or nil,
+        on_invalid = function(reason)
+            report("tend: " .. reason)
+        end,
+        on_submit = function(fields)
+            local params = {
+                workspace_id = ws.workspace_id,
+                kind = "note",
+                text = fields.body,
+            }
+            if fields.title ~= "" then
+                params.title = fields.title
+            end
+            if #fields.tags > 0 then
+                params.tags = fields.tags
+            end
+            if task and task.ref then
+                params.task = task.ref
+            end
+            self:call("memory.write", params, function(result)
+                local entry = type(result) == "table" and result.entry or nil
+                local title = entry and entry.title
+                local suffix = title and title ~= "" and (": " .. title) or ""
+                info("tend: saved memory note" .. suffix)
+            end)
+        end,
+    })
 end
 
 --- @private

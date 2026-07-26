@@ -1191,6 +1191,19 @@ Slash commands (prompt) ~
   search term is required (the daemon does not list all memories); reports
   when nothing matches or no workspace is open (run |:TendConnect| first).
 
+                                                      *:TendMemoryWrite*
+:TendMemoryWrite
+  Write a workspace memory note. Opens an authoring form — markdown `#`
+  headings for Title, Tags (comma-separated), and Body — where `<C-s>`
+  submits and `q`/`<Esc>` cancels (the form rests in normal mode). The body
+  is required; the title is optional (the daemon derives a stable id from
+  it, or generates one). The note binds to the current task when one is
+  focused (see |:TendTaskPick|), otherwise it is a workspace-level note.
+  Given a range (e.g. from a visual selection, `:'<,'>TendMemoryWrite`), the
+  selected lines prefill the body — a quick way to stash a fact from a
+  buffer. Requires an open workspace (run |:TendConnect| first). Steering
+  memories (auto-injected context) are not authored here.
+
                                                       *:TendOpenChanges*
 :TendOpenChanges [{change_set_id}]
   Open a change set's files in buffers for in-place review. With no

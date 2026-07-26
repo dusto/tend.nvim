@@ -40,6 +40,40 @@ describe("tend.ui.memory_form", function()
             assert.equal("", fields.body)
             assert.same({}, fields.tags)
         end)
+
+        it("keeps markdown headings inside the body verbatim", function()
+            -- The body is free-form markdown (and can be a captured selection),
+            -- so `#` headings after `# Body` must not be re-read as form
+            -- delimiters and drop content.
+            local fields = MemoryForm.parse({
+                "# Title",
+                "Doc",
+                "# Tags (comma-separated)",
+                "docs",
+                "# Body",
+                "# Overview",
+                "",
+                "Intro text.",
+                "## Details",
+                "more",
+            })
+            assert.equal("Doc", fields.title)
+            assert.same({ "docs" }, fields.tags)
+            assert.equal(
+                "# Overview\n\nIntro text.\n## Details\nmore",
+                fields.body
+            )
+        end)
+
+        it(
+            "round-trips a captured selection that starts with a heading",
+            function()
+                local body = "# Heading\nsome captured text"
+                local fields =
+                    MemoryForm.parse(MemoryForm.template({ body = body }))
+                assert.equal(body, fields.body)
+            end
+        )
     end)
 
     describe("template", function()

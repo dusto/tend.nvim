@@ -60,20 +60,31 @@ end
 --- Parse form buffer lines into note fields. Each `# Heading` starts a section;
 --- its body is the lines until the next heading, trimmed. Tags split on commas
 --- (empties dropped); title and body are the trimmed section text.
+---
+--- Body is the terminal, free-form section: once it starts, every remaining line
+--- is taken verbatim — INCLUDING lines that look like `# headings`. A note body
+--- (or a captured selection) is markdown and routinely contains headings, so
+--- re-reading them as form delimiters would silently drop body content.
 --- @param lines string[]
 --- @return tend.ui.MemoryForm.Fields fields
 function M.parse(lines)
     local sections = {}
     local current = nil
+    local in_body = false
     for _, line in ipairs(lines) do
-        local heading = line:match("^#%s+(.+)")
-        if heading then
-            current = field_for(heading)
-            if current and sections[current] == nil then
-                sections[current] = {}
+        if in_body then
+            table.insert(sections.body, line)
+        else
+            local heading = line:match("^#%s+(.+)")
+            if heading then
+                current = field_for(heading)
+                if current and sections[current] == nil then
+                    sections[current] = {}
+                end
+                in_body = current == "body"
+            elseif current and sections[current] then
+                table.insert(sections[current], line)
             end
-        elseif current and sections[current] then
-            table.insert(sections[current], line)
         end
     end
 

@@ -64,6 +64,7 @@ tend-introduction	tend.txt	/*tend-introduction*
 tend-keymaps	tend.txt	/*tend-keymaps*
 tend-keymaps-customizing	tend.txt	/*tend-keymaps-customizing*
 tend-lualine	tend.txt	/*tend-lualine*
+tend-memory-activity	tend.txt	/*tend-memory-activity*
 tend-message-icons	tend.txt	/*tend-message-icons*
 tend-nvim-cmp	tend.txt	/*tend-nvim-cmp*
 tend-permission-approval	tend.txt	/*tend-permission-approval*

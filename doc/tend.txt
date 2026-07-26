@@ -1204,6 +1204,16 @@ Slash commands (prompt) ~
   buffer. Requires an open workspace (run |:TendConnect| first). Steering
   memories (auto-injected context) are not authored here.
 
+                                                      *tend-memory-activity*
+Memory activity ~
+
+  Once connected, the plugin passively surfaces the workspace's memory
+  activity as unobtrusive notices — so a supervisor sees what a delegated
+  agent wrote or recalled without opening the browser: `tend memory: wrote
+  note "<title>"` when a memory is written, and `tend memory: searched
+  "<query>" (<n> hits)` when the agent searches. No configuration; there are
+  no popups.
+
                                                       *:TendOpenChanges*
 :TendOpenChanges [{change_set_id}]
   Open a change set's files in buffers for in-place review. With no

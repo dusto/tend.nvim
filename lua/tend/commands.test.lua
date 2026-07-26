@@ -364,6 +364,54 @@ describe("tend.commands", function()
         end
     )
 
+    it("surfaces memory_written activity as a notice", function()
+        child.lua([[
+            _G.replies["workspace.open"] = {
+                result = { workspace_id = "ws-1", worktree_root = "/repo" },
+            }
+            vim.cmd("TendConnect")
+            _G.conn.subscriber.tracked[1].on_event({
+                type = "memory_written",
+                payload = { id = "m1", kind = "note", title = "Auth flow" },
+            })
+        ]])
+        local msg = last_notice().msg
+        assert.is_not_nil(msg:find("Auth flow", 1, true))
+        assert.is_not_nil(msg:find("wrote", 1, true))
+    end)
+
+    it("surfaces memory_searched activity as a notice", function()
+        child.lua([[
+            _G.replies["workspace.open"] = {
+                result = { workspace_id = "ws-1", worktree_root = "/repo" },
+            }
+            vim.cmd("TendConnect")
+            _G.conn.subscriber.tracked[1].on_event({
+                type = "memory_searched",
+                payload = { query = "auth", results = 3 },
+            })
+        ]])
+        local msg = last_notice().msg
+        assert.is_not_nil(msg:find("auth", 1, true))
+        assert.is_not_nil(msg:find("3", 1, true))
+    end)
+
+    it("does not notice non-memory workspace events", function()
+        child.lua([[
+            _G.replies["workspace.open"] = {
+                result = { workspace_id = "ws-1", worktree_root = "/repo" },
+            }
+            vim.cmd("TendConnect")
+            _G.notices = {}
+            _G.conn.subscriber.tracked[1].on_event({
+                type = "provider_started",
+                payload = { provider_id = "codex" },
+            })
+        ]])
+        -- The provider event is not memory activity, so no notice is emitted.
+        assert.equal(0, child.lua_get("#_G.notices"))
+    end)
+
     it("dispose unsubscribes the workspace stream", function()
         child.lua([[
             _G.replies["workspace.open"] = {

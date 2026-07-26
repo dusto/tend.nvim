@@ -810,8 +810,39 @@ function Context:track_workspace(workspace_id)
         stream_id = stream_id,
         on_event = function(event)
             self.conn.approvals:handle_event(event)
+            self:apply_memory_activity(event)
         end,
     })
+end
+
+--- @private
+--- Surface workspace memory activity (memory_written / memory_searched) as an
+--- unobtrusive notice, so a supervisor sees what a delegated agent wrote or
+--- recalled without opening the memory browser. Other event types are ignored.
+--- @param event table daemon event envelope
+function Context:apply_memory_activity(event)
+    local payload = type(event.payload) == "table" and event.payload or {}
+    if event.type == "memory_written" then
+        local kind = type(payload.kind) == "string"
+                and payload.kind ~= ""
+                and payload.kind
+            or "note"
+        local title = type(payload.title) == "string"
+                and payload.title ~= ""
+                and payload.title
+            or "(untitled)"
+        info("tend memory: wrote " .. kind .. ' "' .. title .. '"')
+    elseif event.type == "memory_searched" then
+        local query = type(payload.query) == "string" and payload.query or ""
+        local results = tonumber(payload.results) or 0
+        info(
+            string.format(
+                'tend memory: searched "%s" (%d hits)',
+                query,
+                results
+            )
+        )
+    end
 end
 
 --- @private

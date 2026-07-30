@@ -79,6 +79,15 @@ end
 --- @param params table
 --- @return any[] results
 local function request_all(bufnr, method, params)
+    -- vim.lsp is built via vim._defer_require, whose deferred-module type LuaLS
+    -- (bundled with Neovim 0.12.2) cannot reconcile with the real 4-param
+    -- `function lsp.buf_request_sync(bufnr, method, params, timeout_ms)`, so it
+    -- resolves the call to a 0-arg signature and wrongly flags every argument as
+    -- redundant-parameter. The runtime function is correct and unchanged (it is
+    -- the sync LSP primitive; buf_request_all is the async alternative, not a
+    -- drop-in). Suppress the meta-stub false positive rather than rewrite a
+    -- correct call. See tend-48d.35.
+    ---@diagnostic disable-next-line: redundant-parameter
     local responses =
         vim.lsp.buf_request_sync(bufnr, method, params, REQUEST_TIMEOUT_MS)
     if not responses then

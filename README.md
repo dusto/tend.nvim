@@ -13,17 +13,26 @@ approvals/permissions, and diffs, and forwards editor-local actions.
 
 ## Requirements
 
-- Neovim (recent)
-- the TEND daemon: https://github.com/dusto/tend
+- **Neovim 0.12+** — installed below with the built-in plugin manager
+  (`vim.pack`, added in 0.12). No external plugin manager is needed.
+- the TEND daemon (`tendd`): https://github.com/dusto/tend
 
-## Install (lazy.nvim)
+## Install
+
+Neovim 0.12 ships a built-in plugin manager, `vim.pack`, so `tend.nvim` installs
+with no other components. Add this to your `init.lua`:
 
 ```lua
-{
-  "dusto/tend.nvim",
-  opts = {},
-}
+vim.pack.add({ "https://github.com/dusto/tend.nvim" })
+require("tend").setup({})
 ```
+
+`vim.pack.add` clones the plugin on first start and adds it to the runtimepath;
+`require("tend").setup()` registers the `:Tend*` commands. Update with
+`:lua vim.pack.update()`; remove with `:lua vim.pack.del({ "tend.nvim" })`.
+
+Then start the daemon (see the [`tend`](https://github.com/dusto/tend) repo) and
+run `:TendConnect`. See `:help tend.txt` for commands and configuration.
 
 ## Credits
 

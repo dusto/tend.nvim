@@ -1655,6 +1655,45 @@ describe("tend.commands", function()
         )
     end)
 
+    it(
+        "TendSessionStop ends the session via agent.stop and drops it",
+        function()
+            child.lua([[
+            _G.give_session() -- ses-1 tracked + focused
+            _G.stopped_buf = _G.ctx:active_session().bufnr
+            _G.replies["agent.stop"] = { result = {} }
+            _G.ui_choice = 1 -- only one tracked session
+            vim.cmd("TendSessionStop")
+        ]])
+            -- agent.stop is sent for the picked session (unlike disconnect)...
+            local found
+            for _, c in ipairs(calls()) do
+                if c.method == "agent.stop" then
+                    found = c
+                end
+            end
+            assert.is_not_nil(found)
+            assert.equal("ses-1", found.params.session_id)
+            -- ...and on success the session is torn down locally.
+            assert.equal(
+                "str-1",
+                child.lua_get("_G.conn.subscriber.untracked[1]")
+            )
+            assert.is_true(child.lua_get("_G.ctx.sessions['ses-1'] == nil"))
+            assert.is_false(
+                child.lua_get("vim.api.nvim_buf_is_valid(_G.stopped_buf)")
+            )
+        end
+    )
+
+    it("TendSessionStop reports when nothing is tracked", function()
+        child.lua([[vim.cmd("TendSessionStop")]])
+        assert.same({}, calls())
+        assert.is_not_nil(
+            last_notice().msg:find("no tracked sessions", 1, true)
+        )
+    end)
+
     it("setup stops the previous context's connection", function()
         child.lua([[
             require("tend.commands").setup({

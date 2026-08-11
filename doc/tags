@@ -14,6 +14,7 @@
 :TendSessionInfo	tend.txt	/*:TendSessionInfo*
 :TendSessionNew	tend.txt	/*:TendSessionNew*
 :TendSessionRename	tend.txt	/*:TendSessionRename*
+:TendSessionStop	tend.txt	/*:TendSessionStop*
 :TendTaskNew	tend.txt	/*:TendTaskNew*
 :TendTaskPick	tend.txt	/*:TendTaskPick*
 next	tend.txt	/*next*

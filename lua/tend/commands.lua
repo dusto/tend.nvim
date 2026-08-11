@@ -725,6 +725,11 @@ function Context:register_commands()
             "Stop following a session in this editor",
         },
         {
+            "TendSessionStop",
+            "session_stop",
+            "End a session and release its provider process",
+        },
+        {
             "TendSessionInfo",
             "session_info",
             "Show the focused session's token/context usage",
@@ -1889,6 +1894,40 @@ function Context:session_disconnect()
         end
         self:disconnect_session(session)
         info("tend: disconnected session " .. session.session_id)
+    end)
+end
+
+--- End a session on the daemon (agent.stop): pick one, stop it — which cancels
+--- its in-flight turn, ends it, and releases its provider process — then tear it
+--- down locally. Unlike |:TendSessionDisconnect| (which only un-follows so the
+--- session can be re-attached later), this ends the daemon session for good;
+--- other sessions keep running.
+function Context:session_stop()
+    local tracked = {}
+    for _, session in pairs(self.sessions) do
+        table.insert(tracked, session)
+    end
+    if #tracked == 0 then
+        report("tend: no tracked sessions to stop")
+        return
+    end
+    table.sort(tracked, function(a, b)
+        return a.session_id < b.session_id
+    end)
+    vim.ui.select(tracked, {
+        prompt = "Stop session",
+        format_item = function(s)
+            local marker = (s.session_id == self.active) and "● " or "  "
+            return marker .. s.session_id
+        end,
+    }, function(session)
+        if not session then
+            return
+        end
+        self:call("agent.stop", { session_id = session.session_id }, function()
+            self:disconnect_session(session)
+            info("tend: stopped session " .. session.session_id)
+        end)
     end)
 end
 

@@ -1115,6 +1115,15 @@ a task is delegated to the session (see |:TendTaskPick|).
   dropped. The session keeps running on the daemon (this is a client-side
   detach, not a stop), so |:TendSessionAttach| can pick it up again.
 
+                                                       *:TendSessionStop*
+:TendSessionStop
+  End a session on the daemon: pick a tracked session and stop it. Unlike
+  |:TendSessionDisconnect| (a client-side detach), this cancels the session's
+  in-flight turn, ends it, and releases its provider process — the daemon
+  session is gone for good and cannot be re-attached. Other sessions keep
+  running. The session is also torn down locally (stream unsubscribed,
+  transcript dropped). Equivalent to `tend stop <session-id>` from the CLI.
+
                                                      *:TendSessionRename*
 :TendSessionRename
   Set or clear the focused session's user-facing label. Prompts for a name

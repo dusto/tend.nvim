@@ -115,21 +115,24 @@ end
 --- than a streamed chunk.
 --- @param payload table user_prompt payload ({ text, attachments? })
 function ChatView:_write_user_prompt(payload)
-    local text = payload.text
-    if type(text) ~= "string" or text == "" then
+    local text = type(payload.text) == "string" and payload.text or ""
+    -- The event carries only a count of attachments (blob content is not
+    -- persisted). A file-only prompt has empty text but real attachments, so it
+    -- must still render — dropping it would make the prompt vanish on replay.
+    local attachments = payload.attachments
+    local has_attachments = type(attachments) == "number" and attachments > 0
+
+    if text == "" and not has_attachments then
         return
     end
-    -- The event carries only a count of attachments (blob content is not
-    -- persisted); note it so a prompt that referenced files is not misread as
-    -- text-only.
-    local attachments = payload.attachments
-    if type(attachments) == "number" and attachments > 0 then
-        text = string.format(
-            "%s\n\n_(+%d attachment%s)_",
-            text,
+
+    if has_attachments then
+        local note = string.format(
+            "_(+%d attachment%s)_",
             attachments,
             attachments == 1 and "" or "s"
         )
+        text = text ~= "" and (text .. "\n\n" .. note) or note
     end
     self.writer:write_message({
         sessionUpdate = "user_message_chunk",

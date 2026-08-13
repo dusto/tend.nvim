@@ -122,7 +122,20 @@ describe("tend.transcript.ChatView", function()
         assert.is_not_nil(text():find("2 attachment", 1, true))
     end)
 
-    it("ignores a user_prompt with empty text", function()
+    it("renders an attachment-only prompt (empty text)", function()
+        -- A file-only prompt carries no text but real attachments; it must still
+        -- appear in the transcript (and on replay), not vanish.
+        view:apply(event(1, "user_prompt", {
+            session_id = "s1",
+            text = "",
+            attachments = 1,
+        }))
+        local body = text()
+        assert.is_not_nil(body:find("User", 1, true))
+        assert.is_not_nil(body:find("1 attachment", 1, true))
+    end)
+
+    it("ignores a user_prompt with no text and no attachments", function()
         view:apply(event(1, "user_prompt", { session_id = "s1", text = "" }))
         assert.same({ "" }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
     end)

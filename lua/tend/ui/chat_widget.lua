@@ -66,6 +66,7 @@ ChatWidget.__index = ChatWidget
 --- @field switch_model? fun()
 --- @field change_mode? fun()
 --- @field change_thought_level? fun()
+--- @field inspect_turn? fun()
 
 --- Source the @-file completion needs, injected so the widget stays decoupled
 --- from the daemon connection: on_pick attaches the picked path to the next
@@ -643,6 +644,26 @@ function ChatWidget:_bind_switch_session(bufnr)
     )
 end
 
+--- Bind the turn-inspector keymap on a chat buffer, opening the detail float for
+--- the turn under the cursor. Chat-buffer only (it reads the transcript cursor)
+--- and a no-op when no inspect_turn control was injected, so the key stays
+--- unbound where no daemon session backs the transcript.
+--- @param bufnr integer
+function ChatWidget:_bind_inspect_turn(bufnr)
+    local inspect = self.controls and self.controls.inspect_turn
+    if not inspect then
+        return
+    end
+    BufHelpers.multi_keymap_set(
+        Config.keymaps.widget.inspect_turn,
+        bufnr,
+        function()
+            inspect()
+        end,
+        { desc = "Tend: Inspect turn" }
+    )
+end
+
 --- Bind the chat-buffer keymaps (close, jump-to-input, transcript navigation)
 --- to an arbitrary chat buffer. The daemon path renders one chat buffer per
 --- session and swaps which one the chat window shows, so each session buffer
@@ -654,6 +675,7 @@ function ChatWidget:bind_chat_keymaps(bufnr)
     end, { desc = "Tend: Close Chat widget" })
     self:_bind_controls(bufnr)
     self:_bind_switch_session(bufnr)
+    self:_bind_inspect_turn(bufnr)
     for _, key in ipairs({ "a", "A", "o", "O", "i", "I", "c", "C", "x", "X" }) do
         BufHelpers.keymap_set(bufnr, "n", key, function()
             self:move_cursor_to(

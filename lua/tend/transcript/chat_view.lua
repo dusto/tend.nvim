@@ -24,6 +24,7 @@ local NS_USAGE = vim.api.nvim_create_namespace("tend_usage_annotation")
 --- @field private bufnr integer
 --- @field private seen table<string, boolean> "kind:seq" keys already applied
 --- @field private usage tend.session.Usage per-turn token/context accumulator
+--- @field private annotated_turns integer authoritative turns already annotated
 local ChatView = {}
 ChatView.__index = ChatView
 
@@ -50,6 +51,7 @@ function ChatView.new(bufnr, opts)
         bufnr = bufnr,
         seen = {},
         usage = Usage.Usage.new(),
+        annotated_turns = 0,
     }, ChatView)
 end
 
@@ -127,6 +129,16 @@ end
 --- when the turn reported no authoritative token usage, so a turn without usage
 --- is not marked with an empty annotation.
 function ChatView:_annotate_turn()
+    -- Only annotate when an authoritative token-usage event arrived during this
+    -- turn. usage.last_turn is persistent session state, so a turn_end with no
+    -- fresh agent_token_usage would otherwise re-render the previous turn's
+    -- counts. usage.turns advances once per agent_token_usage, so a boundary
+    -- that did not advance it produced no new usage to show.
+    if self.usage.turns <= self.annotated_turns then
+        return
+    end
+    self.annotated_turns = self.usage.turns
+
     local text = Usage.render_turn_annotation(self.usage)
     if not text then
         return

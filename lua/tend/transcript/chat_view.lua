@@ -69,7 +69,9 @@ function ChatView:apply(event)
     local payload = type(event.payload) == "table" and event.payload or {}
     local etype = event.type
 
-    if etype == "agent_message_chunk" then
+    if etype == "user_prompt" then
+        self:_write_user_prompt(payload)
+    elseif etype == "agent_message_chunk" then
         self:_write_chunk("agent_message_chunk", payload.text)
     elseif etype == "agent_thought_chunk" then
         self:_write_chunk("agent_thought_chunk", payload.text)
@@ -103,6 +105,39 @@ function ChatView:apply(event)
     end
     -- approval_requested / approval_resolved / provider_notification are not
     -- rendered here (see the module note).
+end
+
+--- @private
+--- Render the user's prompt for a turn as a distinct 'user' block, so the human
+--- side of the conversation is visible in the transcript (the session stream
+--- otherwise carries only agent output). The daemon emits user_prompt as the
+--- turn starts; it is a complete message, so it writes as a full block rather
+--- than a streamed chunk.
+--- @param payload table user_prompt payload ({ text, attachments? })
+function ChatView:_write_user_prompt(payload)
+    local text = type(payload.text) == "string" and payload.text or ""
+    -- The event carries only a count of attachments (blob content is not
+    -- persisted). A file-only prompt has empty text but real attachments, so it
+    -- must still render — dropping it would make the prompt vanish on replay.
+    local attachments = payload.attachments
+    local has_attachments = type(attachments) == "number" and attachments > 0
+
+    if text == "" and not has_attachments then
+        return
+    end
+
+    if has_attachments then
+        local note = string.format(
+            "_(+%d attachment%s)_",
+            attachments,
+            attachments == 1 and "" or "s"
+        )
+        text = text ~= "" and (text .. "\n\n" .. note) or note
+    end
+    self.writer:write_message({
+        sessionUpdate = "user_message_chunk",
+        content = { type = "text", text = text },
+    })
 end
 
 --- @private

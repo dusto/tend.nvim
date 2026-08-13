@@ -205,6 +205,30 @@ describe("tend.transcript.ChatView", function()
         end
     )
 
+    it("maps a buffer line to its turn record for the inspector", function()
+        view:apply(
+            event(1, "user_prompt", { session_id = "s1", text = "first" })
+        )
+        view:apply(event(2, "agent_message_chunk", { text = "reply one" }))
+        view:apply(event(3, "turn_end", {}))
+        -- A line inside turn 1's rendered region resolves to turn 1.
+        local r1 = view:inspect_turn_at(1)
+        assert.is_not_nil(r1)
+        --- @cast r1 tend.transcript.TurnRecord
+        assert.equal("first", r1.prompt.text)
+
+        -- The in-progress (unsealed) turn is reachable at the last line.
+        view:apply(
+            event(4, "user_prompt", { session_id = "s1", text = "second" })
+        )
+        view:apply(event(5, "agent_message_chunk", { text = "reply two" }))
+        local last = vim.api.nvim_buf_line_count(bufnr) - 1
+        local r2 = view:inspect_turn_at(last)
+        assert.is_not_nil(r2)
+        --- @cast r2 tend.transcript.TurnRecord
+        assert.equal("second", r2.prompt.text)
+    end)
+
     it("renders an agent error inline", function()
         view:apply(event(1, "agent_error", { message = "boom" }))
         assert.is_not_nil(text():find("boom", 1, true))

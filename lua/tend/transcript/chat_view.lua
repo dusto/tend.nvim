@@ -13,6 +13,7 @@
 --- here (approvals surface through the approval manager).
 local MessageWriter = require("tend.ui.message_writer")
 local Usage = require("tend.session.usage")
+local TurnLog = require("tend.transcript.turn_log")
 
 -- Virtual-line annotations at turn boundaries. Buffer-scoped extmarks in a
 -- shared (idempotent) namespace; isolation comes from each ChatView owning one
@@ -25,6 +26,8 @@ local NS_USAGE = vim.api.nvim_create_namespace("tend_usage_annotation")
 --- @field private seen table<string, boolean> "kind:seq" keys already applied
 --- @field private usage tend.session.Usage per-turn token/context accumulator
 --- @field private annotated_turns integer authoritative turns already annotated
+--- @field private turn_log tend.transcript.TurnLog per-turn detail for the inspector
+--- @field private turn_boundaries integer[] 0-indexed end line of each sealed turn
 local ChatView = {}
 ChatView.__index = ChatView
 
@@ -52,6 +55,8 @@ function ChatView.new(bufnr, opts)
         seen = {},
         usage = Usage.Usage.new(),
         annotated_turns = 0,
+        turn_log = TurnLog.TurnLog.new(),
+        turn_boundaries = {},
     }, ChatView)
 end
 
@@ -79,6 +84,8 @@ function ChatView:apply(event)
     -- Fold the (otherwise unrendered) usage events into the accumulator; they
     -- surface as the condensed annotation at the next turn boundary.
     self.usage:apply(event)
+    -- And into the per-turn log, which the inspector reads (48d.36 layer 3).
+    self.turn_log:apply(event)
 
     local payload = type(event.payload) == "table" and event.payload or {}
     local etype = event.type
@@ -108,9 +115,14 @@ function ChatView:apply(event)
             })
         end
     elseif etype == "turn_end" then
-        -- A turn boundary: annotate it with the turn's condensed usage, then
-        -- reset sender tracking so the next turn's agent output writes a fresh
-        -- header rather than extending the last one.
+        -- A turn boundary: record where it ended (so the inspector can map a
+        -- cursor line to its turn), annotate it with the turn's condensed usage,
+        -- then reset sender tracking so the next turn's agent output writes a
+        -- fresh header rather than extending the last one.
+        table.insert(
+            self.turn_boundaries,
+            vim.api.nvim_buf_line_count(self.bufnr) - 1
+        )
         self:_annotate_turn()
         self.writer:reset_sender_tracking()
     elseif etype == "agent_error" then
@@ -121,6 +133,24 @@ function ChatView:apply(event)
     end
     -- approval_requested / approval_resolved / provider_notification are not
     -- rendered here (see the module note).
+end
+
+--- The turn record for a buffer line, for the inspector float (48d.36 layer 3).
+--- A sealed turn owns the lines up to and including its boundary; a line past the
+--- last boundary belongs to the in-progress turn. Always returns a record (the
+--- open turn exists from the start), so the caller can render placeholders for a
+--- turn with no detail yet.
+--- @param line integer 0-indexed buffer line
+--- @return tend.transcript.TurnRecord|nil record
+function ChatView:inspect_turn_at(line)
+    local index = #self.turn_boundaries + 1
+    for i, boundary in ipairs(self.turn_boundaries) do
+        if line <= boundary then
+            index = i
+            break
+        end
+    end
+    return self.turn_log:record(index)
 end
 
 --- @private

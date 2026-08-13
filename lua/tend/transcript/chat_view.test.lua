@@ -88,6 +88,45 @@ describe("tend.transcript.ChatView", function()
         end
     )
 
+    it("renders a user_prompt as a distinct user block", function()
+        view:apply(event(1, "user_prompt", {
+            session_id = "s1",
+            text = "do the thing",
+        }))
+        local body = text()
+        -- The human side of the conversation is now visible: a User header and
+        -- the prompt text, not just agent output.
+        assert.is_not_nil(body:find("User", 1, true))
+        assert.is_not_nil(body:find("do the thing", 1, true))
+    end)
+
+    it("renders the user prompt before the agent's reply", function()
+        view:apply(event(1, "user_prompt", { session_id = "s1", text = "ask" }))
+        view:apply(event(2, "agent_message_chunk", { text = "answer" }))
+        local body = text()
+        local user_at = body:find("ask", 1, true)
+        local agent_at = body:find("answer", 1, true)
+        assert.is_not_nil(user_at)
+        assert.is_not_nil(agent_at)
+        assert.is_not_nil(body:find("User", 1, true))
+        assert.is_not_nil(body:find("Agent", 1, true))
+        assert.is_true(user_at < agent_at)
+    end)
+
+    it("notes attachment count on a user_prompt that carries them", function()
+        view:apply(event(1, "user_prompt", {
+            session_id = "s1",
+            text = "look at these",
+            attachments = 2,
+        }))
+        assert.is_not_nil(text():find("2 attachment", 1, true))
+    end)
+
+    it("ignores a user_prompt with empty text", function()
+        view:apply(event(1, "user_prompt", { session_id = "s1", text = "" }))
+        assert.same({ "" }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
     it("renders an agent error inline", function()
         view:apply(event(1, "agent_error", { message = "boom" }))
         assert.is_not_nil(text():find("boom", 1, true))

@@ -69,7 +69,9 @@ function ChatView:apply(event)
     local payload = type(event.payload) == "table" and event.payload or {}
     local etype = event.type
 
-    if etype == "agent_message_chunk" then
+    if etype == "user_prompt" then
+        self:_write_user_prompt(payload)
+    elseif etype == "agent_message_chunk" then
         self:_write_chunk("agent_message_chunk", payload.text)
     elseif etype == "agent_thought_chunk" then
         self:_write_chunk("agent_thought_chunk", payload.text)
@@ -103,6 +105,36 @@ function ChatView:apply(event)
     end
     -- approval_requested / approval_resolved / provider_notification are not
     -- rendered here (see the module note).
+end
+
+--- @private
+--- Render the user's prompt for a turn as a distinct 'user' block, so the human
+--- side of the conversation is visible in the transcript (the session stream
+--- otherwise carries only agent output). The daemon emits user_prompt as the
+--- turn starts; it is a complete message, so it writes as a full block rather
+--- than a streamed chunk.
+--- @param payload table user_prompt payload ({ text, attachments? })
+function ChatView:_write_user_prompt(payload)
+    local text = payload.text
+    if type(text) ~= "string" or text == "" then
+        return
+    end
+    -- The event carries only a count of attachments (blob content is not
+    -- persisted); note it so a prompt that referenced files is not misread as
+    -- text-only.
+    local attachments = payload.attachments
+    if type(attachments) == "number" and attachments > 0 then
+        text = string.format(
+            "%s\n\n_(+%d attachment%s)_",
+            text,
+            attachments,
+            attachments == 1 and "" or "s"
+        )
+    end
+    self.writer:write_message({
+        sessionUpdate = "user_message_chunk",
+        content = { type = "text", text = text },
+    })
 end
 
 --- @private

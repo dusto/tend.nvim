@@ -12,6 +12,8 @@
 --- sync. :TendOpenChanges/:TendDiff drive the daemon's diff-review surface
 --- (file.diff) and the local diff renderer.
 local ChatView = require("tend.transcript.chat_view")
+local TurnInspector = require("tend.transcript.turn_inspector")
+local TurnInspectorView = require("tend.ui.turn_inspector_view")
 local ChatWidget = require("tend.ui.chat_widget")
 local CodeSelection = require("tend.ui.code_selection")
 local Config = require("tend.config")
@@ -103,6 +105,7 @@ local M = {}
 --- @field private todos? tend.ui.TodoList shared todos panel, created on first plan
 --- @field private info_view tend.ui.SessionInfoView live session usage detail float
 --- @field private info_shown? { session_id: string, header: tend.session.UsageHeader } session the info float currently renders
+--- @field private turn_inspector tend.ui.TurnInspectorView per-turn detail float (gi in the transcript)
 --- @field private file_list? tend.ui.FileList referenced-files context, attached to the next turn
 --- @field private code_selection? tend.ui.CodeSelection code-selection context, attached to the next turn
 --- @field private diagnostics? tend.ui.DiagnosticsList diagnostics context, attached to the next turn
@@ -165,6 +168,7 @@ function M.setup(opts)
         todos = nil,
         info_view = SessionInfoView.SessionInfoView.new(),
         info_shown = nil,
+        turn_inspector = TurnInspectorView.TurnInspectorView.new(),
         task_form = opts.task_form or TaskForm,
         memory_form = opts.memory_form or MemoryForm,
         widget_factory = opts.widget_factory
@@ -278,6 +282,9 @@ function Context:ensure_widget()
             end,
             change_thought_level = function()
                 self:change_thought_level()
+            end,
+            inspect_turn = function()
+                self:inspect_current_turn()
             end,
         }, {
             -- Slash completion source: command names come from the active
@@ -1193,6 +1200,29 @@ end
 --- @return tend.commands.Session|nil
 function Context:active_session()
     return self.active and self.sessions[self.active] or nil
+end
+
+--- Open the turn-inspector float for the turn under the cursor in the current
+--- chat buffer (bound to `gi` in the transcript). Resolves the session by the
+--- current buffer so the right transcript is inspected even if focus and the
+--- shown buffer disagree; reports and returns when the cursor is not in a
+--- tracked chat buffer.
+function Context:inspect_current_turn()
+    local buf = vim.api.nvim_get_current_buf()
+    local session
+    for _, s in pairs(self.sessions) do
+        if s.bufnr == buf then
+            session = s
+            break
+        end
+    end
+    if not session or not session.view then
+        Logger.notify("tend: no chat transcript here to inspect")
+        return
+    end
+    local line = vim.api.nvim_win_get_cursor(0)[1] - 1
+    local record = session.view:inspect_turn_at(line)
+    self.turn_inspector:show(TurnInspector.render(record))
 end
 
 --- @private

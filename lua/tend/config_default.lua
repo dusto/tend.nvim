@@ -324,6 +324,10 @@ local ConfigDefault = {
             switch_session = "<localLeader>S",
             switch_model = "<localLeader>m",
             change_thought_level = "<localLeader>t",
+            -- Inspect the turn under the cursor in the chat transcript: opens a
+            -- detail float (prompt, context, tokens, tools) with foldable
+            -- sections.
+            inspect_turn = "gi",
         },
 
         --- Keys bindings for the prompt buffer

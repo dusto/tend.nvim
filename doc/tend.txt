@@ -417,6 +417,9 @@ These keybindings are automatically set in Tend buffers:
   <localLeader>t         n       Switch the focused session's thought/
                                  reasoning level (daemon thought-level
                                  axis; reports if none)
+  gi                     n       Inspect the turn under the cursor: a detail
+                                 float (prompt, context, tokens, tools) with
+                                 foldable sections (za to fold)
   q                      n       Close chat widget
   d                      n/v     Remove file/selection/diagnostic
   ]]                     n       Next chat heading
@@ -453,6 +456,7 @@ Override default keybindings via the `keymaps` config option:
         switch_session = "<localLeader>S",
         switch_model = "<localLeader>m",
         change_thought_level = "<localLeader>t",
+        inspect_turn = "gi",
       },
       prompt = {
         submit = {

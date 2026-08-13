@@ -191,4 +191,28 @@ function M.render_lines(usage, header)
     return lines
 end
 
+--- A condensed one-line usage annotation for a turn boundary, or nil when no
+--- authoritative turn tokens have been reported (a prompt estimate alone does
+--- not count — the boundary marks a completed turn). e.g.
+--- "↑1,200 ↓18.2k · ctx ~18%". The context percent is appended only when the
+--- window size is known.
+--- @param usage tend.session.Usage
+--- @return string|nil annotation
+function M.render_turn_annotation(usage)
+    local turn = usage.last_turn
+    if not turn then
+        return nil
+    end
+    local parts = {
+        "↑" .. M.humanize(turn.input_tokens),
+        "↓" .. M.humanize(turn.output_tokens),
+    }
+    local ctx = usage.context
+    local pct = ctx and percent(ctx.used_tokens or 0, ctx.window_tokens or 0)
+    if pct then
+        table.insert(parts, "ctx " .. pct)
+    end
+    return table.concat(parts, " · ")
+end
+
 return M

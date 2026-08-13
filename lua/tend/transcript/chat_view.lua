@@ -12,11 +12,18 @@
 --- a later bead, so approval and provider-notification events are not rendered
 --- here (approvals surface through the approval manager).
 local MessageWriter = require("tend.ui.message_writer")
+local Usage = require("tend.session.usage")
+
+-- Virtual-line annotations at turn boundaries. Buffer-scoped extmarks in a
+-- shared (idempotent) namespace; isolation comes from each ChatView owning one
+-- buffer.
+local NS_USAGE = vim.api.nvim_create_namespace("tend_usage_annotation")
 
 --- @class tend.transcript.ChatView
 --- @field private writer tend.ui.MessageWriter
 --- @field private bufnr integer
 --- @field private seen table<string, boolean> "kind:seq" keys already applied
+--- @field private usage tend.session.Usage per-turn token/context accumulator
 local ChatView = {}
 ChatView.__index = ChatView
 
@@ -42,6 +49,7 @@ function ChatView.new(bufnr, opts)
         writer = writer,
         bufnr = bufnr,
         seen = {},
+        usage = Usage.Usage.new(),
     }, ChatView)
 end
 
@@ -65,6 +73,10 @@ function ChatView:apply(event)
         self:_render_summary(event)
         return
     end
+
+    -- Fold the (otherwise unrendered) usage events into the accumulator; they
+    -- surface as the condensed annotation at the next turn boundary.
+    self.usage:apply(event)
 
     local payload = type(event.payload) == "table" and event.payload or {}
     local etype = event.type
@@ -94,8 +106,10 @@ function ChatView:apply(event)
             })
         end
     elseif etype == "turn_end" then
-        -- A turn boundary: reset sender tracking so the next turn's agent
-        -- output writes a fresh header rather than extending the last one.
+        -- A turn boundary: annotate it with the turn's condensed usage, then
+        -- reset sender tracking so the next turn's agent output writes a fresh
+        -- header rather than extending the last one.
+        self:_annotate_turn()
         self.writer:reset_sender_tracking()
     elseif etype == "agent_error" then
         self:_write_chunk(
@@ -105,6 +119,25 @@ function ChatView:apply(event)
     end
     -- approval_requested / approval_resolved / provider_notification are not
     -- rendered here (see the module note).
+end
+
+--- @private
+--- Annotate the just-ended turn with a condensed usage line (up/down tokens,
+--- context-window fill) as dim virtual text below the turn's last line. No-op
+--- when the turn reported no authoritative token usage, so a turn without usage
+--- is not marked with an empty annotation.
+function ChatView:_annotate_turn()
+    local text = Usage.render_turn_annotation(self.usage)
+    if not text then
+        return
+    end
+    -- Anchor to the last line so the annotation sits at the turn boundary; the
+    -- next turn's output appends after it.
+    local last = vim.api.nvim_buf_line_count(self.bufnr) - 1
+    vim.api.nvim_buf_set_extmark(self.bufnr, NS_USAGE, last, 0, {
+        virt_lines = { { { text, "Comment" } } },
+        virt_lines_above = false,
+    })
 end
 
 --- @private

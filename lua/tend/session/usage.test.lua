@@ -167,4 +167,58 @@ describe("tend.session.usage", function()
             assert.equal("Task: none", lines[3])
         end)
     end)
+
+    describe("render_turn_annotation", function()
+        it("returns nil when no authoritative turn tokens yet", function()
+            local u = Usage.Usage.new()
+            assert.is_nil(Usage.render_turn_annotation(u))
+            -- A prompt estimate alone is not an authoritative turn.
+            u:apply(ev("agent_prompt_usage", { tokens_approx = 100 }))
+            assert.is_nil(Usage.render_turn_annotation(u))
+        end)
+
+        it("renders up/down tokens for the last turn", function()
+            local u = Usage.Usage.new()
+            u:apply(ev("agent_token_usage", {
+                input_tokens = 1200,
+                output_tokens = 18240,
+                total_tokens = 19440,
+            }))
+            local a = Usage.render_turn_annotation(u)
+            assert.is_not_nil(a)
+            --- @cast a string
+            assert.is_not_nil(a:find("1,200", 1, true))
+            assert.is_not_nil(a:find("18.2k", 1, true))
+        end)
+
+        it("appends context-window percent when the window is known", function()
+            local u = Usage.Usage.new()
+            u:apply(ev("agent_token_usage", {
+                input_tokens = 10,
+                output_tokens = 20,
+                total_tokens = 30,
+            }))
+            u:apply(ev("agent_context_usage", {
+                used_tokens = 18000,
+                window_tokens = 100000,
+            }))
+            assert.is_not_nil(
+                Usage.render_turn_annotation(u):find("18%", 1, true)
+            )
+        end)
+
+        it("omits context percent when the window is unknown", function()
+            local u = Usage.Usage.new()
+            u:apply(ev("agent_token_usage", {
+                input_tokens = 10,
+                output_tokens = 20,
+                total_tokens = 30,
+            }))
+            u:apply(ev("agent_context_usage", {
+                used_tokens = 18000,
+                window_tokens = 0,
+            }))
+            assert.is_nil(Usage.render_turn_annotation(u):find("ctx", 1, true))
+        end)
+    end)
 end)

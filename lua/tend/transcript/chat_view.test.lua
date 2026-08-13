@@ -140,6 +140,71 @@ describe("tend.transcript.ChatView", function()
         assert.same({ "" }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
     end)
 
+    --- All annotation chunk text across the usage-annotation namespace's marks.
+    --- @return string
+    local function annotation_text()
+        local ns = vim.api.nvim_get_namespaces()["tend_usage_annotation"]
+        if not ns then
+            return ""
+        end
+        local marks =
+            vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, { details = true })
+        local out = {}
+        for _, m in ipairs(marks) do
+            local virt = m[4] and m[4].virt_lines
+            for _, line in ipairs(virt or {}) do
+                for _, chunk in ipairs(line) do
+                    table.insert(out, chunk[1])
+                end
+            end
+        end
+        return table.concat(out, "\n")
+    end
+
+    it("annotates the turn boundary with usage virtual text", function()
+        view:apply(event(1, "agent_message_chunk", { text = "answer" }))
+        view:apply(event(2, "agent_token_usage", {
+            input_tokens = 1200,
+            output_tokens = 3400,
+            total_tokens = 4600,
+        }))
+        view:apply(event(3, "agent_context_usage", {
+            used_tokens = 18000,
+            window_tokens = 100000,
+        }))
+        view:apply(event(4, "turn_end", {}))
+        local a = annotation_text()
+        assert.is_not_nil(a:find("1,200", 1, true))
+        assert.is_not_nil(a:find("3,400", 1, true))
+        assert.is_not_nil(a:find("18%", 1, true))
+    end)
+
+    it("does not annotate a turn with no token usage", function()
+        view:apply(event(1, "agent_message_chunk", { text = "hi" }))
+        view:apply(event(2, "turn_end", {}))
+        assert.equal("", annotation_text())
+    end)
+
+    it(
+        "does not repeat prior counts on a turn with no fresh token usage",
+        function()
+            -- last_turn is persistent session state; a later turn_end without a
+            -- fresh agent_token_usage must not re-annotate with the old counts.
+            view:apply(event(1, "agent_message_chunk", { text = "one" }))
+            view:apply(event(2, "agent_token_usage", {
+                input_tokens = 100,
+                output_tokens = 200,
+                total_tokens = 300,
+            }))
+            view:apply(event(3, "turn_end", {}))
+            view:apply(event(4, "agent_message_chunk", { text = "two" }))
+            view:apply(event(5, "turn_end", {})) -- no fresh usage this turn
+            local ns = vim.api.nvim_get_namespaces()["tend_usage_annotation"]
+            local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, {})
+            assert.equal(1, #marks)
+        end
+    )
+
     it("renders an agent error inline", function()
         view:apply(event(1, "agent_error", { message = "boom" }))
         assert.is_not_nil(text():find("boom", 1, true))

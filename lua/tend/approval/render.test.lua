@@ -114,6 +114,56 @@ describe("tend.approval.render", function()
         }, lines)
     end)
 
+    it("renders a filesystem_access read as access, not a diff", function()
+        local lines, marks = Render.render({
+            approval_id = "ap-fs",
+            session_id = "ses-1",
+            kind = "filesystem_access",
+            detail = {
+                requested_uri = "file:///etc/hosts",
+                resolved_path = "/etc/hosts",
+                mode = "read",
+                tool = "file.read",
+            },
+        })
+        assert.same({
+            "filesystem_access · session ses-1",
+            "",
+            "Allow this session to read /etc/hosts?",
+            "outside the worktree",
+            "tool: file.read",
+        }, lines)
+        assert.same({
+            { row = 0, group = "Title" },
+            { row = 3, group = "WarningMsg" },
+        }, marks)
+    end)
+
+    it(
+        "renders a diagnostics read and surfaces a symlinked requested uri",
+        function()
+            local lines = Render.render({
+                approval_id = "ap-fs2",
+                session_id = "ses-1",
+                kind = "filesystem_access",
+                detail = {
+                    requested_uri = "file:///repo/link/file.go",
+                    resolved_path = "/other-repo/file.go",
+                    mode = "diagnostics",
+                    tool = "lsp.diagnostics",
+                },
+            })
+            assert.same({
+                "filesystem_access · session ses-1",
+                "",
+                "Allow this session to read diagnostics for /other-repo/file.go?",
+                "outside the worktree",
+                "requested: file:///repo/link/file.go",
+                "tool: lsp.diagnostics",
+            }, lines)
+        end
+    )
+
     it("renders a code_action title and file", function()
         local lines = Render.render({
             approval_id = "ap-4",

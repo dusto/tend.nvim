@@ -106,6 +106,43 @@ local function render_pane_open(out, detail)
     end
 end
 
+--- The path a file:// uri points at, or nil when it is not a file uri (so a
+--- non-file requested_uri is compared verbatim rather than crashing uri_to_fname).
+--- @param uri string
+--- @return string|nil path
+local function file_uri_path(uri)
+    if type(uri) ~= "string" or uri:sub(1, 7) ~= "file://" then
+        return nil
+    end
+    return vim.uri_to_fname(uri)
+end
+
+--- Render a filesystem_access approval as a read-consent decision, never a diff.
+--- An outside-worktree read is a consent choice: the daemon resolved the path,
+--- and the user is approving access to the RESOLVED target. So the resolved path
+--- leads the prompt, "outside the worktree" is called out unmistakably, and the
+--- requested uri is shown only when it resolves elsewhere (a symlink alias) so
+--- the user consents to the real target, not the alias.
+--- @param out tend.approval.RenderOut
+--- @param detail table
+local function render_filesystem_access(out, detail)
+    local resolved = tostring(detail.resolved_path)
+    local operation = detail.mode == "diagnostics"
+            and ("read diagnostics for " .. resolved)
+        or ("read " .. resolved)
+    put(out, "Allow this session to " .. operation .. "?")
+    put(out, "outside the worktree", "WarningMsg")
+    if
+        detail.requested_uri ~= nil
+        and file_uri_path(detail.requested_uri) ~= resolved
+    then
+        put(out, "requested: " .. tostring(detail.requested_uri))
+    end
+    if type(detail.tool) == "string" and detail.tool ~= "" then
+        put(out, "tool: " .. detail.tool)
+    end
+end
+
 --- @param out tend.approval.RenderOut
 --- @param detail table
 local function render_code_action(out, detail)
@@ -116,6 +153,7 @@ end
 --- @type table<string, fun(out: tend.approval.RenderOut, detail: table)>
 local detail_renderers = {
     file_edit = render_file_edit,
+    filesystem_access = render_filesystem_access,
     pane_run = render_pane_run,
     pane_open = render_pane_open,
     code_action = render_code_action,

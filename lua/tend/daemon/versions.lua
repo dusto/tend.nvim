@@ -39,7 +39,10 @@ M.REQUIRED = {
     -- approvals, so it must be rejected at the handshake rather than silently
     -- delivering no approval prompts. (0.13.0 added session_renamed, which the
     -- header consumes to keep a session's label live; 0.7.0 added
-    -- agent_thought_level_updated; 0.6.0 slash_commands_updated; 0.5.0 agent_plan.)
+    -- agent_thought_level_updated; 0.6.0 slash_commands_updated; 0.5.0 agent_plan.
+    -- 1.1.0 added the filesystem_access approval kind, which the approval renderer
+    -- now surfaces; it is reactive — a pre-1.1.0 daemon hard-denies outside-worktree
+    -- reads and never emits it — so the required minimum stays 1.0.0.)
     daemon_to_client = "1.0.0",
 }
 

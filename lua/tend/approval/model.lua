@@ -11,7 +11,7 @@
 --- @class tend.approval.Approval
 --- @field approval_id string
 --- @field session_id string
---- @field kind string operation kind: file_edit | pane_open | pane_run | code_action
+--- @field kind string operation kind: file_edit | filesystem_access | pane_open | pane_run | code_action
 --- @field prompt? string human-facing text from prompt.raise
 --- @field expires_at? string RFC3339 deadline from the gate envelope
 --- @field detail? table kind-specific decision context (the ApprovalDetail body)

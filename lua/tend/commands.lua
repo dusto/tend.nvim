@@ -415,6 +415,23 @@ function Context:add_selection()
     return true
 end
 
+--- Add an explicit 1-based inclusive line range of the current buffer to the
+--- next turn's context as a selection. Used by :TendAddSelection, which runs
+--- after visual mode has exited (so the mode()-based add_selection cannot see
+--- the selection) and passes its command range instead.
+--- @param line1 integer
+--- @param line2 integer
+--- @return boolean added
+function Context:add_selection_range(line1, line2)
+    local selection = CodeSelection.get_range(line1, line2)
+    if not selection then
+        return false
+    end
+    self:ensure_context()
+    self.code_selection:add(selection)
+    return true
+end
+
 --- Add a buffer (default: the current one) to the next turn's context as a
 --- referenced file. Reports when the buffer has no file name.
 --- @param buf? integer|string buffer number or path
@@ -748,6 +765,16 @@ function Context:register_commands()
         },
         { "TendChat", "chat", "Send a prompt to the focused session" },
         {
+            "TendAddFile",
+            "add_file",
+            "Add the current file to the next turn's context",
+        },
+        {
+            "TendStop",
+            "stop_generation",
+            "Stop the focused session's in-flight turn",
+        },
+        {
             "TendMemory",
             "memory_browse",
             "Search and view the workspace's memories",
@@ -769,6 +796,34 @@ function Context:register_commands()
             self[method](self, cmd.args ~= "" and cmd.args or nil)
         end, { desc = desc, nargs = nargs or 0 })
     end
+
+    -- :TendAddSelection takes a range: a :command runs after visual mode has
+    -- exited, so the selection is read from the command's range (cmd.line1/line2),
+    -- not from mode(). With no range (a bare :TendAddSelection) there is nothing
+    -- to capture, so it reports rather than silently adding nothing.
+    vim.api.nvim_create_user_command("TendAddSelection", function(cmd)
+        if cmd.range > 0 then
+            self:add_selection_range(cmd.line1, cmd.line2)
+        else
+            report(
+                "tend: :TendAddSelection needs a range — select lines first "
+                    .. "(or bind <Plug>(tend-add-selection) for visual mode)"
+            )
+        end
+    end, {
+        desc = "Add the selected lines to the next turn's context",
+        range = true,
+    })
+
+    -- :TendAddDiagnostics adds the current buffer's diagnostics; it reports when
+    -- there are none so a no-op is visible rather than silent.
+    vim.api.nvim_create_user_command("TendAddDiagnostics", function()
+        if self:add_buffer_diagnostics() == 0 then
+            report("tend: no diagnostics in the current buffer")
+        end
+    end, {
+        desc = "Add the current buffer's diagnostics to the next turn's context",
+    })
 
     -- :TendMemoryWrite takes a range so a visual selection prefills the note
     -- body; the shared loop above does not wire range, so register it here.

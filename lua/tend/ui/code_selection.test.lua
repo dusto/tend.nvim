@@ -36,6 +36,47 @@ describe("tend.ui.CodeSelection", function()
         end
     end)
 
+    describe("get_range", function()
+        it(
+            "builds a selection from an explicit line range without visual mode",
+            function()
+                local buf = vim.api.nvim_create_buf(false, true)
+                vim.api.nvim_buf_set_lines(
+                    buf,
+                    0,
+                    -1,
+                    false,
+                    { "one", "two", "three", "four" }
+                )
+                vim.api.nvim_set_current_buf(buf)
+
+                local selection = CodeSelection.get_range(2, 3)
+                assert.is_not_nil(selection)
+                --- @cast selection -nil
+                assert.same({ "two", "three" }, selection.lines)
+                assert.equal(2, selection.start_line)
+                assert.equal(3, selection.end_line)
+
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        )
+
+        it("normalizes a reversed range", function()
+            local buf = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a", "b", "c" })
+            vim.api.nvim_set_current_buf(buf)
+
+            local selection = CodeSelection.get_range(3, 1)
+            assert.is_not_nil(selection)
+            --- @cast selection -nil
+            assert.same({ "a", "b", "c" }, selection.lines)
+            assert.equal(1, selection.start_line)
+            assert.equal(3, selection.end_line)
+
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+    end)
+
     describe("add and get_selections", function()
         it("adds selection and retrieves it", function()
             --- @type tend.Selection

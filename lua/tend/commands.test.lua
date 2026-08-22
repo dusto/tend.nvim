@@ -277,6 +277,10 @@ describe("tend.commands", function()
             "TendSessionAttach",
             "TendSessionDisconnect",
             "TendChat",
+            "TendAddFile",
+            "TendAddSelection",
+            "TendAddDiagnostics",
+            "TendStop",
             "TendEvents",
             "TendApprove",
             "TendOpenChanges",
@@ -293,6 +297,24 @@ describe("tend.commands", function()
         }) do
             assert.is_nil(names[gone])
         end
+    end)
+
+    it("TendAddSelection captures its command range as a selection", function()
+        child.lua([[
+            local buf = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_buf_set_lines(
+                buf, 0, -1, false, { "alpha", "beta", "gamma" })
+            vim.api.nvim_set_current_buf(buf)
+            vim.cmd("1,2TendAddSelection")
+        ]])
+        assert.equal(
+            1,
+            child.lua_get("#_G.ctx.code_selection:get_selections()")
+        )
+        assert.same(
+            { "alpha", "beta" },
+            child.lua_get("_G.ctx.code_selection:get_selections()[1].lines")
+        )
     end)
 
     it(

@@ -154,6 +154,32 @@ local cleanup_group = vim.api.nvim_create_augroup("TendCleanup", {
     clear = true,
 })
 
+--- Define the <Plug> targets for the context/session actions. These are inert
+--- named mappings — they claim no keys, so they respect the project rule against
+--- default global keymaps while giving users a stable thing to bind (e.g.
+--- `vim.keymap.set("x", "<leader>as", "<Plug>(tend-add-selection)")`). The
+--- selection map uses <cmd> so visual mode is preserved when add_selection reads
+--- the selection; the rest are normal-mode function targets. Defined once (the
+--- setup traps guard), and never a real keybinding by default.
+function Tend._set_plug_mappings()
+    vim.keymap.set(
+        "x",
+        "<Plug>(tend-add-selection)",
+        "<cmd>lua require('tend').add_selection()<CR>",
+        { silent = true, desc = "tend: add the visual selection to context" }
+    )
+    --- @type table<string, fun()>
+    local normal = {
+        ["<Plug>(tend-add-file)"] = Tend.add_file,
+        ["<Plug>(tend-add-line-diagnostics)"] = Tend.add_current_line_diagnostics,
+        ["<Plug>(tend-add-buffer-diagnostics)"] = Tend.add_buffer_diagnostics,
+        ["<Plug>(tend-stop)"] = Tend.stop_generation,
+    }
+    for lhs, fn in pairs(normal) do
+        vim.keymap.set("n", lhs, fn, { silent = true })
+    end
+end
+
 --- Merges the current user configuration with the default configuration
 --- This method should be safe to be called multiple times
 --- @param opts tend.PartialUserConfig
@@ -186,6 +212,8 @@ function Tend.setup(opts)
     vim.treesitter.language.register("markdown", "TendChat")
 
     Theme.setup()
+
+    Tend._set_plug_mappings()
 
     -- Force-reload buffers when files change on disk (e.g., agent edits files directly).
     -- Suppresses the "file changed" prompt so modified buffers reload silently,

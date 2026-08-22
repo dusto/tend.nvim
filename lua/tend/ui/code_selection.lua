@@ -172,43 +172,55 @@ function CodeSelection:_render()
     self._on_change(self)
 end
 
+--- Build a selection from an explicit 1-based inclusive line range in the current
+--- buffer. Unlike get_selected_text this needs no visual mode, so a :command
+--- (which runs after visual mode has exited) can capture its range. A reversed
+--- range is normalized; an empty buffer yields nil.
+--- @param start_line integer
+--- @param end_line integer
+--- @return tend.Selection|nil selection
+function CodeSelection.get_range(start_line, end_line)
+    -- Ensure start_line is always smaller than end_line (handle backward selection)
+    if start_line > end_line then
+        start_line, end_line = end_line, start_line
+    end
+
+    local lines = vim.api.nvim_buf_get_lines(
+        0,
+        start_line - 1, -- 0-indexed
+        end_line, -- exclusive
+        false
+    )
+    if #lines == 0 then
+        return nil
+    end
+
+    local buf_name = vim.api.nvim_buf_get_name(0)
+
+    --- @class tend.Selection
+    local selection = {
+        lines = lines,
+        start_line = start_line,
+        end_line = end_line,
+        file_path = FileSystem.to_smart_path(buf_name),
+        file_type = Theme.get_language_from_path(buf_name),
+    }
+
+    return selection
+end
+
 --- @return tend.Selection|nil
 function CodeSelection.get_selected_text()
     local mode = vim.fn.mode()
 
     if mode == "v" or mode == "V" then
-        local start_pos = vim.fn.getpos("v")
-        local end_pos = vim.fn.getpos(".")
-        local start_line = start_pos[2]
-        local end_line = end_pos[2]
-
-        -- Ensure start_line is always smaller than end_line (handle backward selection)
-        if start_line > end_line then
-            start_line, end_line = end_line, start_line
-        end
-
-        local lines = vim.api.nvim_buf_get_lines(
-            0,
-            start_line - 1, -- 0-indexed
-            end_line, -- exclusive
-            false
-        )
+        local start_line = vim.fn.getpos("v")[2]
+        local end_line = vim.fn.getpos(".")[2]
 
         -- exit visual mode to avoid issues with the input buffer
         BufHelpers.feed_ESC_key()
 
-        local buf_name = vim.api.nvim_buf_get_name(0)
-
-        --- @class tend.Selection
-        local selection = {
-            lines = lines,
-            start_line = start_line,
-            end_line = end_line,
-            file_path = FileSystem.to_smart_path(buf_name),
-            file_type = Theme.get_language_from_path(buf_name),
-        }
-
-        return selection
+        return CodeSelection.get_range(start_line, end_line)
     end
 end
 

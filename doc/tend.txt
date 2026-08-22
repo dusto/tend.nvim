@@ -499,6 +499,11 @@ Keymap configuration formats:
   - Array: `submit = { "<CR>", "<C-s>" }` (multiple bindings)
   - Table with mode: `{ "<C-s>", mode = { "i", "v" } }`
 
+The keymaps above are buffer-local to Tend's own windows. The editor-wide
+context actions (add selection/file/diagnostics to the next turn, stop the
+turn) have NO default keymaps — Tend does not claim keys in your buffers.
+Bind their `<Plug>` targets to keys you own; see |tend-context-plug-maps|.
+
 ==============================================================================
 DIFF PREVIEW                                      *tend-diff-preview*
 
@@ -996,6 +1001,22 @@ Option 2 -- global enabled function: ~
   })
 <
 
+                                          *tend-mcp-editor-tools*
+MCP editor tools (agent-facing) ~
+
+Some agents (notably Kiro) do their own file I/O and do not use ACP's client
+filesystem calls, so their edits would bypass the buffer, the diff, and the
+approval gate. To keep them supervised, the DAEMON exposes Tend's editor
+operations to the agent as MCP tools (`read_buffer`, `open_buffer`,
+`write_buffer`, `edit_buffer`); `write_buffer`/`edit_buffer` route through the
+same change-set -> approval flow, so you still review a diff before it lands.
+
+This is entirely daemon-side: the daemon declares the MCP server per session
+and spawns `tend mcp` itself. There is NOTHING to install or configure in the
+plugin — the buffer edits and approval floats you already see are how these
+tools surface. It only requires the `tend` binary to be reachable beside
+`tendd`. See the `tend` repo's README and ADR 0004 for the design.
+
 ==============================================================================
 HEALTH CHECK                                      *tend-health-check*
 
@@ -1178,6 +1199,48 @@ Slash commands (prompt) ~
   daemon dispatches: a command it owns runs as a daemon action (its outcome
   is reported), and anything else is forwarded to the agent as a prompt turn
   (its output streams into the transcript like a normal message).
+
+                                                      *tend-context-actions*
+Context actions ~
+
+  These attach editor context to the focused session's NEXT prompt turn, or
+  stop the current one. Context accumulates (files, selections, diagnostics)
+  and is sent with the next |:TendChat| message, then cleared. They have no
+  default keymaps; bind the `<Plug>` targets below to editor keys you own.
+
+                                                          *:TendAddFile*
+:TendAddFile
+  Add the current buffer's file to the next turn's context. Reports when the
+  buffer has no file name.
+
+                                                        *:TendAddSelection*
+:TendAddSelection
+  Add the selected lines to the next turn's context. Use it with a range —
+  from visual mode `:'<,'>TendAddSelection`, or bind the visual-mode
+  `<Plug>` target below. A bare `:TendAddSelection` with no range reports
+  rather than adding nothing.
+
+                                                      *:TendAddDiagnostics*
+:TendAddDiagnostics
+  Add the current buffer's diagnostics to the next turn's context. Reports
+  when the buffer has none.
+
+                                                          *:TendStop*
+:TendStop
+  Stop the focused session's in-flight turn (agent.cancel), returning it to
+  idle. Reports when no session is focused.
+
+                                                    *tend-context-plug-maps*
+  For editor keymaps, bind these `<Plug>` targets — inert by default, so
+  Tend never claims a key you did not choose: >lua
+    vim.keymap.set("x", "<leader>as", "<Plug>(tend-add-selection)")
+    vim.keymap.set("n", "<leader>af", "<Plug>(tend-add-file)")
+    vim.keymap.set("n", "<leader>ad", "<Plug>(tend-add-buffer-diagnostics)")
+    vim.keymap.set("n", "<leader>aD", "<Plug>(tend-add-line-diagnostics)")
+    vim.keymap.set("n", "<leader>ax", "<Plug>(tend-stop)")
+<
+  `<Plug>(tend-add-selection)` is a visual-mode map (it reads the live
+  selection); the rest are normal-mode. See also |tend-keymaps|.
 
                                                           *:TendEvents*
 :TendEvents

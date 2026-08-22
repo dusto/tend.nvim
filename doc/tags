@@ -1,3 +1,6 @@
+:TendAddDiagnostics	tend.txt	/*:TendAddDiagnostics*
+:TendAddFile	tend.txt	/*:TendAddFile*
+:TendAddSelection	tend.txt	/*:TendAddSelection*
 :TendApprove	tend.txt	/*:TendApprove*
 :TendChat	tend.txt	/*:TendChat*
 :TendClaim	tend.txt	/*:TendClaim*
@@ -15,6 +18,7 @@
 :TendSessionNew	tend.txt	/*:TendSessionNew*
 :TendSessionRename	tend.txt	/*:TendSessionRename*
 :TendSessionStop	tend.txt	/*:TendSessionStop*
+:TendStop	tend.txt	/*:TendStop*
 :TendTaskNew	tend.txt	/*:TendTaskNew*
 :TendTaskPick	tend.txt	/*:TendTaskPick*
 next	tend.txt	/*next*
@@ -30,6 +34,8 @@ tend-config-settings	tend.txt	/*tend-config-settings*
 tend-config-windows	tend.txt	/*tend-config-windows*
 tend-configuration	tend.txt	/*tend-configuration*
 tend-contents	tend.txt	/*tend-contents*
+tend-context-actions	tend.txt	/*tend-context-actions*
+tend-context-plug-maps	tend.txt	/*tend-context-plug-maps*
 tend-copilot	tend.txt	/*tend-copilot*
 tend-customization	tend.txt	/*tend-customization*
 tend-daemon	tend.txt	/*tend-daemon*
@@ -65,6 +71,7 @@ tend-introduction	tend.txt	/*tend-introduction*
 tend-keymaps	tend.txt	/*tend-keymaps*
 tend-keymaps-customizing	tend.txt	/*tend-keymaps-customizing*
 tend-lualine	tend.txt	/*tend-lualine*
+tend-mcp-editor-tools	tend.txt	/*tend-mcp-editor-tools*
 tend-memory-activity	tend.txt	/*tend-memory-activity*
 tend-message-icons	tend.txt	/*tend-message-icons*
 tend-nvim-cmp	tend.txt	/*tend-nvim-cmp*
